@@ -1,0 +1,28 @@
+:root {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', 'Consolas', 'Menlo', monospace;
+  line-height: 1.4;
+  font-weight: 400;
+  font-size: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: #00ff00;
+  background: #000000;
+}
+
+button {
+  border: 1px solid #333333;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  background: #111111;
+  color: #00ff00;
+}

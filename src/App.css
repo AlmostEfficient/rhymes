@@ -1,0 +1,245 @@
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+}
+
+.app-container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 2rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  font-family: 'Georgia', 'Times New Roman', serif;
+}
+
+.main-title {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  color: #e8f4f8;
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: all 0.8s ease;
+  min-height: 3rem;
+  text-shadow: 0 0 20px rgba(232, 244, 248, 0.3);
+}
+
+.main-title.animated {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.subtitle {
+  font-size: 1.5rem;
+  color: #a8c8ec;
+  margin-bottom: 2rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.character-name {
+  color: #64b5f6;
+  font-weight: bold;
+}
+
+.dream-text {
+  color: #81c784;
+  font-style: italic;
+}
+
+.stanza-progress {
+  font-size: 1.1rem;
+  color: #90caf9;
+  margin-bottom: 2rem;
+  font-weight: 500;
+}
+
+.poem-lines {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  margin: 2rem 0;
+  height: 240px;
+  padding: 2rem;
+  background: rgba(26, 32, 44, 0.8);
+  border-radius: 20px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  border: 1px solid rgba(120, 144, 156, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.line-slot {
+  font-size: 1.2rem;
+  line-height: 1.4;
+  margin: 0.5rem 0;
+  padding: 1rem;
+  color: #e8f4f8;
+  height: 50px;
+  min-width: 400px;
+  opacity: 0;
+  animation: fadeIn 0.8s ease forwards;
+  font-weight: 500;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(120, 144, 156, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.line-slot.line-1 {
+  animation-delay: 0.2s;
+}
+
+.line-slot.line-2 {
+  animation-delay: 0.4s;
+}
+
+.line-slot.line-3 {
+  animation-delay: 0.6s;
+  color: #81c784;
+  font-style: italic;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stanza-break {
+  height: 2rem;
+}
+
+.generating {
+  font-style: italic;
+  color: #90caf9;
+  margin: 1rem 0;
+  animation: pulse 1.5s infinite;
+  font-size: 1.1rem;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.input-form {
+  width: 100%;
+  margin: 2rem 0;
+}
+
+.line-input {
+  width: 100%;
+  font-size: 1.2rem;
+  padding: 1rem;
+  border: 2px solid #456b7a;
+  border-radius: 12px;
+  text-align: center;
+  font-family: 'Georgia', 'Times New Roman', serif;
+  background: rgba(26, 32, 44, 0.9);
+  color: #e8f4f8;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.line-input:focus {
+  outline: none;
+  border-color: #64b5f6;
+  box-shadow: 0 6px 25px rgba(100, 181, 246, 0.4);
+  transform: translateY(-2px);
+  background: rgba(26, 32, 44, 1);
+}
+
+.line-input::placeholder {
+  color: #90a4ae;
+  font-style: italic;
+}
+
+.start-button, .new-poem-button {
+  font-size: 1.3rem;
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  cursor: pointer;
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-weight: bold;
+  transition: all 0.3s ease;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+  margin: 1rem;
+}
+
+.start-button:hover, .new-poem-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+}
+
+.start-button:active, .new-poem-button:active {
+  transform: translateY(0);
+}
+
+.rhythm-guide {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: rgba(26, 32, 44, 0.9);
+  color: #90caf9;
+  padding: 0.8rem 1.2rem;
+  border-radius: 25px;
+  font-family: monospace;
+  font-size: 1rem;
+  opacity: 0.8;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(120, 144, 156, 0.2);
+}
+
+@media (max-width: 768px) {
+  .app-container {
+    padding: 1rem;
+  }
+  
+  .main-title {
+    font-size: 2rem;
+  }
+  
+  .subtitle {
+    font-size: 1.2rem;
+  }
+  
+  .line-slot {
+    font-size: 1.2rem;
+    padding: 0.8rem;
+  }
+  
+  .line-input {
+    font-size: 1rem;
+  }
+  
+  .poem-lines {
+    padding: 1.5rem;
+    height: 200px;
+  }
+  
+  .line-slot {
+    min-width: 280px;
+    height: 40px;
+  }
+  
+  .rhythm-guide {
+    position: static;
+    margin-top: 2rem;
+  }
+}
