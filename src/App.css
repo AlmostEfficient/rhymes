@@ -199,6 +199,50 @@ body {
   outline: none;
 }
 
+.user-input-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.push-to-talk-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  border: 1px solid #2a2522;
+  background: #f2ede6;
+  color: #2a2522;
+  font-size: 0.95rem;
+  font-weight: 500;
+  padding: 0.45rem 0.9rem;
+  min-height: 3rem;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.push-to-talk-button:hover:not(:disabled),
+.push-to-talk-button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(42, 37, 34, 0.15);
+}
+
+.push-to-talk-button--active {
+  background: #2a2522;
+  color: #fffefc;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+.push-to-talk-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .primary-button {
   border: 1px solid #2a2522;
   background: transparent;

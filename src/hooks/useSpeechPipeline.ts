@@ -5,22 +5,27 @@ const STT_MODEL_ID = 'scribe_v1';
 const DEFAULT_OUTPUT_FORMAT = 'mp3_22050_32';
 
 const DEFAULT_VOICE_IDS: [string, string] = [
+  // 'wyoowlc1iU22XqveSbUE', // Raza
   '21m00Tcm4TlvDq8ikWAM', // Rachel
   'EXAVITQu4vr4xnSDxMaL' // Bella
 ];
 
-const LISTEN_DURATION_MS = 8000;
+const MAX_LISTEN_DURATION_MS = 12000;
 
 type UseSpeechPipelineArgs = {
   onTranscription(text: string): void;
   voiceIds?: [string, string];
 };
 
-type RecorderHandle = {
-  stop(): void;
-};
-
 type RecorderErrorEvent = Event & { error?: DOMException };
+
+type RecordingContext = {
+  recorder: MediaRecorder;
+  stream: MediaStream;
+  sessionId: number;
+  blobPromise: Promise<Blob>;
+  timeoutId: number | null;
+};
 
 const validateElevenLabsKey = (): string => {
   const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
@@ -67,11 +72,26 @@ const playAudioBlob = async (
 
   activeAudioRef.current = audio;
 
+  console.log('[speech] playAudioBlob start', {
+    sessionId,
+    size: blob.size,
+    type: blob.type
+  });
+
+  audio.addEventListener('playing', () => {
+    console.log('[speech] audio playing', { sessionId });
+  });
+  audio.addEventListener('ended', () => {
+    console.log('[speech] audio ended', { sessionId });
+  });
+
   try {
     await audio.play();
+    console.log('[speech] audio play resolved', { sessionId });
   } catch (err) {
     URL.revokeObjectURL(objectUrl);
     activeAudioRef.current = null;
+    console.error('[speech] audio play failed', { sessionId, error: err });
     throw err;
   }
 
@@ -100,6 +120,12 @@ const playAudioBlob = async (
 };
 
 const fetchSpeech = async (text: string, voiceId: string, apiKey: string) => {
+  console.log('[speech] fetchSpeech request', {
+    voiceId,
+    length: text.length,
+    sample: text.slice(0, 80)
+  });
+
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
     method: 'POST',
     headers: {
@@ -124,8 +150,18 @@ const fetchSpeech = async (text: string, voiceId: string, apiKey: string) => {
 
   if (!response.ok) {
     const message = await response.text().catch(() => 'Unknown error');
+    console.error('[speech] fetchSpeech failed', {
+      voiceId,
+      status: response.status,
+      message
+    });
     throw new Error(`ElevenLabs TTS failed (${response.status}): ${message}`);
   }
+
+  console.log('[speech] fetchSpeech success', {
+    voiceId,
+    status: response.status
+  });
 
   return readStreamToBlob(response, 'audio/mpeg');
 };
@@ -186,10 +222,124 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
 
   const sessionRef = useRef(0);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
-  const recorderRef = useRef<RecorderHandle | null>(null);
+  const recordingRef = useRef<RecordingContext | null>(null);
+  const wantsRecordingRef = useRef(false);
   const mountedRef = useRef(true);
 
   const voices = useMemo(() => voiceIds ?? DEFAULT_VOICE_IDS, [voiceIds]);
+
+  const finalizeRecording = useCallback(
+    async (shouldSubmit: boolean) => {
+      wantsRecordingRef.current = false;
+      const context = recordingRef.current;
+
+      console.log('[speech] finalizeRecording', {
+        shouldSubmit,
+        hasContext: Boolean(context)
+      });
+
+      if (!context) {
+        if (shouldSubmit && mountedRef.current) {
+          setIsListening(false);
+        }
+        return;
+      }
+
+      recordingRef.current = null;
+
+      const { recorder, blobPromise, stream, sessionId, timeoutId } = context;
+
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+
+      if (recorder.state !== 'inactive') {
+        console.log('[speech] finalizeRecording stopping recorder', { sessionId });
+        recorder.stop();
+      }
+
+      let blob: Blob | null = null;
+
+      try {
+        blob = await blobPromise;
+        console.log('[speech] finalizeRecording got blob', {
+          sessionId,
+          size: blob.size,
+          type: blob.type
+        });
+      } catch (err) {
+        console.error('[speech] finalizeRecording blob error', {
+          sessionId,
+          error: err
+        });
+        if (shouldSubmit && sessionId === sessionRef.current && mountedRef.current) {
+          setError((err as Error).message ?? 'Failed to capture audio.');
+        }
+      } finally {
+        stream.getTracks().forEach(track => track.stop());
+        console.log('[speech] finalizeRecording stopped tracks', { sessionId });
+      }
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      if (!shouldSubmit || !blob || sessionId !== sessionRef.current) {
+        setIsListening(false);
+        return;
+      }
+
+      if (!apiKey) {
+        setIsListening(false);
+        return;
+      }
+
+      try {
+        console.log('[speech] finalizeRecording transcribing', { sessionId });
+        const transcription = await transcribeBlob(blob, apiKey);
+
+        if (sessionId === sessionRef.current && mountedRef.current && transcription) {
+          console.log('[speech] finalizeRecording transcription success', {
+            sessionId,
+            text: transcription
+          });
+          onTranscription(transcription);
+        }
+      } catch (err) {
+        console.error('[speech] finalizeRecording transcription error', {
+          sessionId,
+          error: err
+        });
+        if (sessionId === sessionRef.current && mountedRef.current) {
+          setError((err as Error).message ?? 'Failed to transcribe audio.');
+        }
+      } finally {
+        if (sessionId === sessionRef.current && mountedRef.current) {
+          setIsListening(false);
+        }
+      }
+    },
+    [apiKey, onTranscription]
+  );
+
+  const stopActiveAudio = useCallback(() => {
+    if (!activeAudioRef.current) return;
+    activeAudioRef.current.pause();
+    activeAudioRef.current.removeAttribute('src');
+    activeAudioRef.current.load();
+    activeAudioRef.current = null;
+  }, []);
+
+  const cancelPipeline = useCallback(() => {
+    sessionRef.current += 1;
+    console.log('[speech] cancelPipeline');
+    stopActiveAudio();
+    void finalizeRecording(false);
+    setIsSpeaking(false);
+    setIsListening(false);
+    setActiveSpeakerIndex(null);
+    wantsRecordingRef.current = false;
+  }, [finalizeRecording, stopActiveAudio]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -202,43 +352,39 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
         activeAudioRef.current.load();
         activeAudioRef.current = null;
       }
-      if (recorderRef.current) {
-        recorderRef.current.stop();
-        recorderRef.current = null;
-      }
+      void finalizeRecording(false);
     };
-  }, []);
+  }, [finalizeRecording]);
 
-  const stopActiveRecorder = useCallback(() => {
-    if (!recorderRef.current) return;
-    recorderRef.current.stop();
-    recorderRef.current = null;
-  }, []);
+  const startRecording = useCallback(async () => {
+    if (!apiKey || !mountedRef.current) return false;
+    if (recordingRef.current) return false;
+    if (isSpeaking) return false;
 
-  const stopActiveAudio = useCallback(() => {
-    if (!activeAudioRef.current) return;
-    activeAudioRef.current.pause();
-    activeAudioRef.current.removeAttribute('src');
-    activeAudioRef.current.load();
-    activeAudioRef.current = null;
-  }, []);
+    wantsRecordingRef.current = true;
+    const sessionId = sessionRef.current;
+    let stream: MediaStream | null = null;
 
-  const cancelPipeline = useCallback(() => {
-    sessionRef.current += 1;
-    stopActiveAudio();
-    stopActiveRecorder();
-    setIsSpeaking(false);
-    setIsListening(false);
-    setActiveSpeakerIndex(null);
-  }, [stopActiveAudio, stopActiveRecorder]);
-
-  const startListening = useCallback(async (sessionId: number) => {
-    if (!apiKey || sessionId !== sessionRef.current || !mountedRef.current) return;
-
-    setIsListening(true);
+    console.log('[speech] startRecording request', {
+      sessionId,
+      isSpeaking,
+      hasContext: Boolean(recordingRef.current)
+    });
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('[speech] startRecording got stream', { sessionId });
+
+      if (
+        sessionId !== sessionRef.current ||
+        !mountedRef.current ||
+        !wantsRecordingRef.current
+      ) {
+        stream.getTracks().forEach(track => track.stop());
+        wantsRecordingRef.current = false;
+        console.log('[speech] startRecording aborted post-stream', { sessionId });
+        return false;
+      }
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
@@ -247,21 +393,7 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       const chunks: BlobPart[] = [];
 
-      const cleanup = () => {
-        recorder.stream.getTracks().forEach(track => track.stop());
-        recorderRef.current = null;
-      };
-
-      recorderRef.current = {
-        stop: () => {
-          if (recorder.state !== 'inactive') {
-            recorder.stop();
-          }
-          cleanup();
-        }
-      };
-
-      const recordingPromise = new Promise<Blob>((resolve, reject) => {
+      const blobPromise = new Promise<Blob>((resolve, reject) => {
         const handleDataAvailable = (event: BlobEvent) => {
           if (event.data && event.data.size > 0) {
             chunks.push(event.data);
@@ -284,48 +416,86 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
         recorder.addEventListener('dataavailable', handleDataAvailable);
         recorder.addEventListener('stop', handleStop, { once: true });
         recorder.addEventListener('error', handleError, { once: true });
-
-        recorder.start(300);
-
-        window.setTimeout(() => {
-          if (recorder.state !== 'inactive') {
-            recorder.stop();
-          }
-        }, LISTEN_DURATION_MS);
       });
 
-      const blob = await recordingPromise;
-      cleanup();
+      const context: RecordingContext = {
+        recorder,
+        stream,
+        sessionId,
+        blobPromise,
+        timeoutId: null
+      };
 
-      if (sessionId !== sessionRef.current || !mountedRef.current) return;
+      recordingRef.current = context;
 
-      const transcription = await transcribeBlob(blob, apiKey);
+      const timeoutId = window.setTimeout(() => {
+        if (recorder.state !== 'inactive') {
+          console.warn('[speech] startRecording timeout firing', { sessionId });
+          recorder.stop();
+        }
+      }, MAX_LISTEN_DURATION_MS);
 
-      if (sessionId !== sessionRef.current || !mountedRef.current) return;
+      context.timeoutId = timeoutId;
 
-      if (transcription) {
-        onTranscription(transcription);
+      recorder.start(300);
+      console.log('[speech] startRecording recorder started', { sessionId });
+
+      if (!wantsRecordingRef.current) {
+        void finalizeRecording(true);
+        return false;
       }
+
+      if (sessionId === sessionRef.current && mountedRef.current) {
+        setIsListening(true);
+        console.log('[speech] startRecording listening', { sessionId });
+      }
+
+      setError(null);
+      return true;
     } catch (err) {
-      if (sessionId === sessionRef.current && mountedRef.current) {
-        setError((err as Error).message ?? 'Failed to transcribe audio.');
+      if (recordingRef.current && recordingRef.current.sessionId === sessionId) {
+        recordingRef.current = null;
       }
-    } finally {
-      if (sessionId === sessionRef.current && mountedRef.current) {
+
+      const message = (err as Error).message ?? 'Microphone access failed.';
+
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+
+      if (mountedRef.current && sessionId === sessionRef.current) {
+        console.error('[speech] startRecording error', { sessionId, error: err });
+        setError(message);
         setIsListening(false);
       }
+
+      wantsRecordingRef.current = false;
+      return false;
     }
-  }, [apiKey, onTranscription]);
+  }, [apiKey, finalizeRecording, isSpeaking]);
+
+  const stopRecording = useCallback(async () => {
+    wantsRecordingRef.current = false;
+    console.log('[speech] stopRecording invoked');
+    await finalizeRecording(true);
+  }, [finalizeRecording]);
 
   const runPipeline = useCallback(
     async (lines: string[]) => {
       if (!apiKey) return;
       if (!lines.length) return;
 
+      console.log('[speech] runPipeline invoked', {
+        lines,
+        session: sessionRef.current
+      });
+
       cancelPipeline();
 
       const sessionId = ++sessionRef.current;
       setError(null);
+
+      console.log('[speech] runPipeline session start', { sessionId });
 
       try {
         setIsSpeaking(true);
@@ -336,15 +506,29 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
 
           const voiceId = voices[index % voices.length];
           setActiveSpeakerIndex(index);
+          console.log('[speech] runPipeline narrating', {
+            sessionId,
+            index,
+            voiceId,
+            length: line.length,
+            sample: line.slice(0, 80)
+          });
           const audioBlob = await fetchSpeech(line, voiceId, apiKey);
+          console.log('[speech] runPipeline fetched audio', {
+            sessionId,
+            index,
+            size: audioBlob.size
+          });
           await playAudioBlob(audioBlob, sessionId, sessionRef, activeAudioRef);
           setActiveSpeakerIndex(null);
 
           if (sessionId !== sessionRef.current || !mountedRef.current) {
+            console.log('[speech] runPipeline aborted mid-session', { sessionId });
             return;
           }
         }
       } catch (err) {
+        console.error('[speech] runPipeline error', { sessionId, error: err });
         if (sessionId === sessionRef.current && mountedRef.current) {
           setError((err as Error).message ?? 'Failed to play narration.');
         }
@@ -352,18 +536,20 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
       } finally {
         if (sessionId === sessionRef.current && mountedRef.current) {
           setIsSpeaking(false);
+          console.log('[speech] runPipeline session complete', { sessionId });
         }
         setActiveSpeakerIndex(null);
       }
 
-      await startListening(sessionId);
     },
-    [apiKey, cancelPipeline, startListening, voices]
+    [apiKey, cancelPipeline, voices]
   );
 
   return {
     runPipeline,
     cancelPipeline,
+    startRecording,
+    stopRecording,
     isSpeaking,
     isListening,
     activeSpeakerIndex,

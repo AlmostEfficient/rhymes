@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import './App.css';
 import { PoemStage } from './components/PoemStage';
 import { StanzaProgress } from './components/StanzaProgress';
@@ -30,26 +30,32 @@ function App() {
   const tapTimerRef = useRef<number | null>(null);
   const lastNarratedRef = useRef<string>('');
   const wasStartedRef = useRef(poemState.hasStarted);
+  const [micError, setMicError] = useState<string | null>(null);
 
   const settingsPanelId = 'poem-settings';
 
   const {
     runPipeline,
     cancelPipeline,
+    startRecording,
+    stopRecording,
     isSpeaking,
     isListening,
     activeSpeakerIndex,
     error: speechError
   } = useSpeechPipeline({
-    onTranscription: text => {
-      if (!text) return;
-      setUserInput(text);
-      inputRef.current?.blur();
-      const submitted = submitUserLine(text);
-      if (submitted) {
-        setUserInput('');
-      }
-    }
+    onTranscription: useCallback(
+      (text: string) => {
+        if (!text) return;
+        setUserInput(text);
+        inputRef.current?.blur();
+        const submitted = submitUserLine(text);
+        if (submitted) {
+          setUserInput('');
+        }
+      },
+      [submitUserLine]
+    )
   });
 
   const handleRhythmTap = () => {
@@ -80,15 +86,80 @@ function App() {
     }, 100);
   };
 
-  const handleStartButton = () => {
+  const ensureMicPermission = useCallback(async () => {
+    if (typeof navigator === 'undefined') {
+      return true;
+    }
+
+    const mediaDevices = navigator.mediaDevices;
+
+    if (!mediaDevices?.getUserMedia) {
+      console.warn('[speech] getUserMedia unavailable');
+      setMicError(null);
+      return true;
+    }
+
+    try {
+      const permissions = (navigator as Navigator & { permissions?: Permissions }).permissions;
+      if (permissions?.query) {
+        const status = await permissions.query({ name: 'microphone' as PermissionName });
+        if (status.state === 'granted') {
+          setMicError(null);
+          return true;
+        }
+        if (status.state === 'denied') {
+          setMicError('Microphone access is blocked. Update your browser settings to continue.');
+          return false;
+        }
+      }
+    } catch (err) {
+      console.warn('[speech] microphone permission query failed', err);
+    }
+
+    try {
+      const stream = await mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      setMicError(null);
+      return true;
+    } catch (err) {
+      console.error('[speech] mic permission request failed', err);
+      setMicError('We need microphone access to practice. Check your browser settings and try again.');
+      return false;
+    }
+  }, []);
+
+  const handleStartButton = useCallback(async () => {
     lastNarratedRef.current = '';
+    const hasMic = await ensureMicPermission();
+    if (!hasMic) {
+      return;
+    }
     handleStart();
-  };
+  }, [ensureMicPermission, handleStart]);
 
   const handleNewPoemButton = () => {
     lastNarratedRef.current = '';
     handleNewPoem();
   };
+
+  const handleStartRecording = useCallback(() => {
+    console.log('[speech] handleStartRecording', {
+      isWaitingForUser: poemState.isWaitingForUser,
+      isGenerating: poemState.isGenerating,
+      isSpeaking,
+      isListening
+    });
+    if (!poemState.isWaitingForUser) return false;
+    if (poemState.isGenerating) return false;
+    if (isSpeaking) return false;
+    if (isListening) return true;
+    return startRecording();
+  }, [isListening, isSpeaking, poemState.isGenerating, poemState.isWaitingForUser, startRecording]);
+
+  const handleStopRecording = useCallback(() => {
+    console.log('[speech] handleStopRecording');
+    return stopRecording();
+  }, [stopRecording]);
 
   useEffect(() => {
     if (poemState.isGenerating) return;
@@ -121,6 +192,12 @@ function App() {
     }
     wasStartedRef.current = poemState.hasStarted;
   }, [cancelPipeline, poemState.hasStarted]);
+
+  useEffect(() => {
+    if (!poemState.isWaitingForUser && isListening) {
+      stopRecording();
+    }
+  }, [isListening, poemState.isWaitingForUser, stopRecording]);
 
   return (
     <div className="app-shell">
@@ -182,6 +259,8 @@ function App() {
         inputRef={inputRef as RefObject<HTMLInputElement>}
         speakingIndex={activeSpeakerIndex}
         isListening={isListening && poemState.isWaitingForUser}
+        onStartRecording={poemState.isWaitingForUser ? handleStartRecording : undefined}
+        onStopRecording={poemState.isWaitingForUser ? handleStopRecording : undefined}
       />
 
       {poemState.isGenerating && (
@@ -190,11 +269,13 @@ function App() {
         </div>
       )}
 
-      {speechError && (
-        <div className="status-text" role="alert">
-          {speechError}
-        </div>
-      )}
+      {[micError, speechError]
+        .filter((message): message is string => Boolean(message))
+        .map((message, index) => (
+          <div key={`speech-error-${index}`} className="status-text" role="alert">
+            {message}
+          </div>
+        ))}
 
       {(isSpeaking || isListening) && !poemState.isGenerating && (
         <div className="status-text" role="status" aria-live="polite">
@@ -203,7 +284,7 @@ function App() {
       )}
 
       {!poemState.hasStarted && !poemState.isGenerating && (
-        <button onClick={handleStartButton} className="primary-button">
+        <button onClick={handleStartButton} className="primary-button" type="button">
           start the tale
         </button>
       )}
