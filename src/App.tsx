@@ -187,6 +187,12 @@ function App() {
   }, [stopRecording]);
 
   useEffect(() => {
+    if (!settings.outboundAudioEnabled) {
+      cancelPipeline();
+      lastNarratedRef.current = '';
+      return;
+    }
+
     if (poemState.isGenerating) return;
 
     const firstTwo = poemState.generatedLines.slice(0, 2).filter(Boolean);
@@ -201,7 +207,15 @@ function App() {
 
     lastNarratedRef.current = signature;
     runPipeline(firstTwo);
-  }, [poemState.currentStanza, poemState.generatedLines, poemState.isGenerating, poemState.isWaitingForUser, runPipeline]);
+  }, [
+    cancelPipeline,
+    poemState.currentStanza,
+    poemState.generatedLines,
+    poemState.isGenerating,
+    poemState.isWaitingForUser,
+    runPipeline,
+    settings.outboundAudioEnabled
+  ]);
 
   useEffect(() => {
     return () => {

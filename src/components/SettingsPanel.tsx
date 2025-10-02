@@ -94,6 +94,21 @@ export const SettingsPanel = ({ isOpen, settings, panelId, onClose, onUpdate }: 
       </fieldset>
 
       <fieldset className="settings-field">
+        <legend>Poem Audio</legend>
+        <label className={`toggle ${settings.outboundAudioEnabled ? 'on' : 'off'}`}>
+          <input
+            type="checkbox"
+            checked={settings.outboundAudioEnabled}
+            onChange={() => onUpdate({ outboundAudioEnabled: !settings.outboundAudioEnabled })}
+          />
+          <span className="toggle-track">
+            <span className="toggle-thumb" />
+          </span>
+          <span className="toggle-label">{settings.outboundAudioEnabled ? 'on' : 'off'}</span>
+        </label>
+      </fieldset>
+
+      <fieldset className="settings-field">
         <legend>narrative vibe</legend>
         <div className="settings-options">
           {NARRATIVE_OPTIONS.map(option => (
@@ -113,5 +128,4 @@ export const SettingsPanel = ({ isOpen, settings, panelId, onClose, onUpdate }: 
     </div>
   </section>
 );
-
 
