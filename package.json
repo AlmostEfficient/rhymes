@@ -12,6 +12,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.62.0",
     "@google/generative-ai": "^0.24.1",
+    "@phosphor-icons/react": "^2.1.10",
     "openai": "^5.20.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

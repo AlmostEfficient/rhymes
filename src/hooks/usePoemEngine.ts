@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { streamChatWithMetrics } from '../lib/openai';
 import { CHARACTERS_AND_DREAMS, SUPPORT_VOICE_NAMES } from '../constants/prompts';
 
@@ -21,6 +21,15 @@ export interface ArchivedPoem {
   timestamp: number;
 }
 
+export type RhymeDifficulty = 'easy' | 'medium' | 'hard';
+export type NarrativeMode = 'simple' | 'crazy';
+
+export interface PoemSettings {
+  rhymeDifficulty: RhymeDifficulty;
+  familyFriendly: boolean;
+  narrativeMode: NarrativeMode;
+}
+
 const pickSupportVoices = (): [string, string] => {
   const shuffled = [...SUPPORT_VOICE_NAMES];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -30,7 +39,16 @@ const pickSupportVoices = (): [string, string] => {
   return [shuffled[0], shuffled[1]];
 };
 
-const getRandomPrompt = () => CHARACTERS_AND_DREAMS[Math.floor(Math.random() * CHARACTERS_AND_DREAMS.length)];
+const promptKey = (prompt: (typeof CHARACTERS_AND_DREAMS)[number]) => `${prompt.name}::${prompt.dream}`;
+
+const getRandomPrompt = (excludeKey?: string) => {
+  const pool = excludeKey
+    ? CHARACTERS_AND_DREAMS.filter(prompt => promptKey(prompt) !== excludeKey)
+    : CHARACTERS_AND_DREAMS;
+
+  const source = pool.length ? pool : CHARACTERS_AND_DREAMS;
+  return source[Math.floor(Math.random() * source.length)];
+};
 
 const createPoemState = (
   prompt = getRandomPrompt(),
@@ -49,9 +67,27 @@ const createPoemState = (
 });
 
 export const usePoemEngine = () => {
-  const [poemState, setPoemState] = useState<PoemState>(() => createPoemState());
+  const [poemState, setPoemState] = useState<PoemState>(() => {
+    if (typeof window === 'undefined') return createPoemState();
+    try {
+      const saved = window.localStorage.getItem('poem_state');
+      if (!saved) return createPoemState();
+      return JSON.parse(saved);
+    } catch (err) {
+      console.error('Failed to parse saved poem state:', err);
+      return createPoemState();
+    }
+  });
   const poemStateRef = useRef(poemState);
   const [supportVoices, setSupportVoices] = useState<[string, string]>(pickSupportVoices);
+  const [settings, setSettings] = useState<PoemSettings>({
+    rhymeDifficulty: 'easy',
+    familyFriendly: true,
+    narrativeMode: 'simple'
+  });
+  const settingsRef = useRef(settings);
+  const generationSessionRef = useRef(0);
+  const registeredTimeoutsRef = useRef<number[]>([]);
   const [archivedPoems, setArchivedPoems] = useState<ArchivedPoem[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -66,10 +102,49 @@ export const usePoemEngine = () => {
   });
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
 
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem('poem_state', JSON.stringify(poemState));
+      } catch (err) {
+        console.error('Failed to save poem state:', err);
+      }
+    }
+  }, [poemState]);
+
+  const clearRegisteredTimeouts = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    registeredTimeoutsRef.current.forEach(id => window.clearTimeout(id));
+    registeredTimeoutsRef.current = [];
+  }, []);
+
+  const registerTimeout = useCallback((callback: () => void, delay: number) => {
+    if (typeof window === 'undefined') return;
+    const id = window.setTimeout(() => {
+      registeredTimeoutsRef.current = registeredTimeoutsRef.current.filter(handle => handle !== id);
+      callback();
+    }, delay);
+    registeredTimeoutsRef.current.push(id);
+  }, []);
+
+  useEffect(() => clearRegisteredTimeouts, [clearRegisteredTimeouts]);
+
   const updatePoemState = useCallback((updater: (prev: PoemState) => PoemState) => {
     setPoemState(prev => {
       const next = updater(prev);
       poemStateRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const updateSettings = useCallback((partial: Partial<PoemSettings>) => {
+    setSettings(prev => {
+      const next = { ...prev, ...partial };
+      settingsRef.current = next;
       return next;
     });
   }, []);
@@ -90,6 +165,8 @@ export const usePoemEngine = () => {
 
   const streamTwoLines = useCallback(
     async (prompt: string) => {
+      const sessionId = ++generationSessionRef.current;
+
       updatePoemState(prev => ({
         ...prev,
         generatedLines: [],
@@ -101,6 +178,10 @@ export const usePoemEngine = () => {
 
       try {
         for await (const { chunk } of streamChatWithMetrics(prompt)) {
+          if (sessionId !== generationSessionRef.current) {
+            return;
+          }
+          
           if (!chunk) continue;
           buffer += chunk;
 
@@ -123,15 +204,19 @@ export const usePoemEngine = () => {
           .filter(Boolean)
           .slice(0, 2);
 
-        updatePoemState(prev => ({
-          ...prev,
-          generatedLines: finalLines,
-          isGenerating: false,
-          isWaitingForUser: true
-        }));
+        if (sessionId === generationSessionRef.current) {
+          updatePoemState(prev => ({
+            ...prev,
+            generatedLines: finalLines,
+            isGenerating: false,
+            isWaitingForUser: true
+          }));
+        }
       } catch (error) {
         console.error('Error generating lines:', error);
-        updatePoemState(prev => ({ ...prev, isGenerating: false }));
+        if (sessionId === generationSessionRef.current) {
+          updatePoemState(prev => ({ ...prev, isGenerating: false }));
+        }
       }
     },
     [updatePoemState]
@@ -146,13 +231,34 @@ export const usePoemEngine = () => {
           .join('\n\n')}\n\nContinue this story naturally in stanza ${currentStanza}.`
       : '';
 
-    const stanzaRole = stanzaCount === 0 ? 'the beginning of' : 'continuing';
-    const stanzaInstruction = stanzaCount === 0
-      ? 'Start the story and set the scene'
-      : 'Continue the story naturally from where it left off';
-    const finalStanzaInstruction = poemStateRef.current.currentStanza === 4
-      ? '\n- This is the final stanza, bring the story to a satisfying conclusion'
-      : '';
+    const isFirstStanza = stanzaCount === 0;
+    const isFinalStanza = poemStateRef.current.currentStanza === 4;
+
+    const stanzaRole = isFirstStanza ? 'the beginning of' : 'continuing';
+    const stanzaInstruction = isFirstStanza
+      ? '- Set the scene, introduce the dream and its obstacle, and be crystal clear the dream is still ahead'
+      : isFinalStanza
+        ? '- Drive the story into its climax and payoff for the dream'
+        : '- Continue the story naturally from where it left off, showing progress or setbacks while the dream stays unresolved';
+    const dreamProgressInstruction = isFinalStanza
+      ? '- Resolve the dream in this stanza and deliver a satisfying conclusion'
+      : '- Keep the dream unresolved so the next player has meaningful room to respond';
+
+    const { rhymeDifficulty, familyFriendly, narrativeMode } = settingsRef.current;
+
+    const rhymeDifficultyInstruction =
+      rhymeDifficulty === 'easy'
+        ? '- Use playful, obvious rhymes with straightforward vocabulary'
+        : rhymeDifficulty === 'hard'
+          ? '- Push for inventive, unexpected rhymes and richer vocabulary'
+          : '- Keep the rhymes natural with balanced wordplay';
+
+    const familyFriendlyInstruction = familyFriendly ? '- Keep it family-friendly' : '';
+
+    const narrativeInstruction =
+      narrativeMode === 'crazy'
+        ? '- Lean into surreal twists, bold imagery, and surprising turns'
+        : '- Keep the narrative grounded and coherent';
 
     return `You are helping someone practice improv epic poems. Generate exactly 2 lines for ${stanzaRole} an epic poem about ${topic}.${previousStanzas}
 
@@ -162,7 +268,10 @@ Requirements:
 - ${stanzaInstruction}
 - End the second line with a word that's easy to rhyme with
 - Keep it fun, dramatic, and slightly over-the-top like epic poetry
-- Make it family-friendly${finalStanzaInstruction}
+${rhymeDifficultyInstruction}
+${narrativeInstruction}
+${familyFriendlyInstruction}
+${dreamProgressInstruction}
 
 Examples of correct 8-beat rhythm (da-da-da-da):
 "Diana woke up early and bright" (da-da-da-da-da-da-da-da)
@@ -179,27 +288,26 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
   }, [buildContextPrompt, streamTwoLines]);
 
   const generateTwoLinesForNewPoem = useCallback(async () => {
-    const { character, dream } = poemStateRef.current;
-    const prompt = `You are helping someone practice improv epic poems. Generate exactly 2 lines for the beginning of an epic poem about The Day ${character} ${dream}. This is the first stanza out of 4, so it should be introductory, not final (i.e. if the poem is about someone flying, they should not be flying already).
+    await streamTwoLines(buildContextPrompt(0));
+  }, [buildContextPrompt, streamTwoLines]);
 
-Requirements:
-- Lines should rhyme with each other
-- Each line must be 6-8 words maximum and follow the da-da-da-da rhythm (exactly 8 beats)
-- Start the story and set the scene
-- End the second line with a word that's easy to rhyme with
-- Keep it fun, dramatic, and slightly over-the-top like epic poetry
-- Make it family-friendly
+  const rerollPrompt = useCallback((forceImmediate?: boolean) => {
+    const current = poemStateRef.current;
+    const nextPrompt = getRandomPrompt(promptKey({ name: current.character, dream: current.dream }));
+    const nextState = createPoemState(nextPrompt, { hasStarted: current.hasStarted });
 
-Examples of correct 8-beat rhythm (da-da-da-da):
-"Diana woke up early and bright" (da-da-da-da-da-da-da-da)
-"She grabbed her gear to join the fight"
-"The siren called through morning light"
-"Bob climbed into his jet so fast"
-"He knew this day would be his last"
+    generationSessionRef.current++;
+    clearRegisteredTimeouts();
 
-Your lines must follow this exact rhythm and length. Return only the 2 lines, nothing else.`;
-    await streamTwoLines(prompt);
-  }, [streamTwoLines]);
+    setPoemState(nextState);
+    poemStateRef.current = nextState;
+    setSupportVoices(pickSupportVoices());
+    setActiveArchiveId(null);
+
+    if (current.hasStarted) {
+      void generateTwoLinesForNewPoem();
+    }
+  }, [clearRegisteredTimeouts, generateTwoLinesForNewPoem]);
 
   const handleStart = useCallback(() => {
     setSupportVoices(pickSupportVoices());
@@ -213,6 +321,9 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
     poemStateRef.current = nextState;
     setSupportVoices(pickSupportVoices());
     setActiveArchiveId(null);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('poem_state');
+    }
   }, []);
 
   const submitUserLine = useCallback(
@@ -238,7 +349,7 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
         completedStanzas: [...prev.completedStanzas, completedStanza]
       }));
 
-      setTimeout(() => {
+      registerTimeout(() => {
         const nextStanza = currentStanzaNum + 1;
 
         if (nextStanza > 4) {
@@ -258,7 +369,7 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
           poemStateRef.current = nextState;
           setSupportVoices(pickSupportVoices());
 
-          setTimeout(() => {
+          registerTimeout(() => {
             void generateTwoLinesForNewPoem();
           }, 1000);
         } else {
@@ -269,7 +380,7 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
             userLine: ''
           }));
 
-          setTimeout(() => {
+          registerTimeout(() => {
             void generateTwoLines();
           }, 100);
         }
@@ -277,25 +388,21 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
 
       return true;
     },
-    [generateTwoLines, generateTwoLinesForNewPoem, updatePoemState]
-  );
-
-  const snapshot = useMemo(
-    () => ({
-      poemState,
-      supportVoices,
-      archivedPoems,
-      activeArchiveId
-    }),
-    [poemState, supportVoices, archivedPoems, activeArchiveId]
+    [generateTwoLines, generateTwoLinesForNewPoem, registerTimeout, updatePoemState]
   );
 
   return {
-    ...snapshot,
+    poemState,
+    supportVoices,
+    archivedPoems,
+    activeArchiveId,
+    settings: { ...settings },
     handleStart,
     handleNewPoem,
     handleArchiveToggle,
-    submitUserLine
+    submitUserLine,
+    updateSettings,
+    rerollPrompt
   };
 };
 

@@ -42,13 +42,39 @@ body {
   font-weight: 600;
 }
 
-.header p {
+.header-prompt-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
   margin: 0;
   font-size: clamp(1rem, 3.2vw, 1.2rem);
+  color: inherit;
+  width: 100%;
+}
+
+.header-prompt-toggle:hover .header-reroll,
+.header-prompt-toggle:focus-visible .header-reroll {
+  transform: rotate(-45deg);
+}
+
+.header-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
 }
 
 .header-emphasis {
   font-weight: 600;
+}
+
+.header-reroll {
+  transition: transform 0.2s ease;
 }
 
 .stanza-count {
@@ -123,6 +149,7 @@ body {
   background: #fffefc;
   display: flex;
   align-items: center;
+  justify-content: center;
   font-size: 1.05rem;
   line-height: 1.4;
   overflow: hidden;
@@ -439,6 +466,224 @@ body {
   40% {
     transform: translateY(-3px);
     opacity: 1;
+  }
+}
+
+
+
+.settings-wrapper {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.6rem;
+  z-index: 20;
+}
+
+.settings-toggle {
+  background: transparent;
+  border: none;
+  font-size: 1.6rem;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.settings-toggle:hover {
+  transform: rotate(14deg);
+}
+
+.settings-panel {
+  padding: 1rem 1.2rem 1.4rem;
+  border: 1px solid #d8d1c5;
+  border-radius: 18px;
+  background: #f9f6f1;
+  box-shadow: 0 18px 40px -32px rgba(42, 37, 34, 0.55);
+  display: none;
+  min-width: 240px;
+}
+
+.settings-panel.open {
+  display: block;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #6b645d;
+}
+
+.settings-close {
+  border: none;
+  background: transparent;
+  color: #6b645d;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settings-close:hover {
+  color: #2a2522;
+}
+
+.settings-close:focus {
+  outline: 2px solid #2a2522;
+  outline-offset: 3px;
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.settings-field {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.settings-field legend {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #8e857b;
+  margin-bottom: 0.5rem;
+}
+
+.settings-options {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.option-chip {
+  position: relative;
+  border: 1px solid #cec6ba;
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #6b645d;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.option-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.option-chip:hover {
+  border-color: #2a2522;
+  color: #2a2522;
+}
+
+.option-chip.active {
+  background: #2a2522;
+  border-color: #2a2522;
+  color: #f9f6f1;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.8rem;
+  color: #6b645d;
+}
+
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-track {
+  position: relative;
+  width: 46px;
+  height: 24px;
+  background: #d4cdc2;
+  border-radius: 999px;
+  transition: background 0.2s ease;
+}
+
+.toggle.on .toggle-track {
+  background: #2a2522;
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f9f6f1;
+  transition: transform 0.2s ease;
+}
+
+.toggle.on .toggle-thumb {
+  transform: translateX(20px);
+}
+
+.toggle-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.settings-panel.open {
+  animation: panel-slide 0.18s ease;
+}
+
+@keyframes panel-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 600px) {
+  .settings-panel {
+    padding: 1rem 0.9rem 1.2rem;
+    width: min(88vw, 320px);
+  }
+
+  .settings-options {
+    gap: 0.4rem;
+  }
+
+  .option-chip {
+    font-size: 0.72rem;
+    padding: 0.4rem 0.7rem;
+  }
+  .settings-wrapper {
+    top: 1rem;
+    right: 1rem;
+  }
+
+  .settings-toggle {
+    font-size: 1.4rem;
   }
 }
 
