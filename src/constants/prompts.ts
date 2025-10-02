@@ -5,7 +5,7 @@ export const CHARACTERS_AND_DREAMS = [
   { name: 'Marcus', dream: 'opened a restaurant' },
   { name: 'Luna', dream: 'traveled to space' },
   { name: 'Jake', dream: 'discovered a new species' },
-  { name: 'Maya', dream: 'started her own bakery' },
+  { name: 'Maia', dream: 'started her own bakery' },
   { name: 'Oliver', dream: 'danced on Broadway' },
   { name: 'Zoe', dream: 'saved endangered animals' },
   { name: 'Alex', dream: 'learned to fly' },
@@ -20,6 +20,18 @@ export const CHARACTERS_AND_DREAMS = [
   { name: 'Quinn', dream: 'solved a mystery' },
   { name: 'Isla', dream: 'ate an entire pizza' },
   { name: 'Santi', dream: 'tamed a storm' },
+  { name: 'Kai', dream: 'sailed the seven seas' },
+  { name: 'Iris', dream: 'painted a masterpiece' },
+  { name: 'Felix', dream: 'discovered treasure' },
+  { name: 'Nova', dream: 'invented a time machine' },
+  { name: 'River', dream: 'swam with dolphins' },
+  { name: 'Maya', dream: 'wrote a novel' },
+  { name: 'Atlas', dream: 'explored a temple' },
+  { name: 'Echo', dream: 'sang at a wedding' },
+  { name: 'Sage', dream: 'grew a garden' },
+  { name: 'Phoenix', dream: 'raced the desert' },
+  { name: 'Lyra', dream: 'conducted an orchestra' },
+  { name: 'Orion', dream: 'mapped the stars' },
 ];
 
 export const STICK_FIGURES = [
