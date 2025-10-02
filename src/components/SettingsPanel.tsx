@@ -25,21 +25,27 @@ const MODEL_OPTIONS: { value: ModelProvider; label: string }[] = [
   { value: 'anthropic', label: 'Claude 3.5 Haiku' }
 ];
 
-export const SettingsPanel = ({ isOpen, settings, panelId, onClose, onUpdate }: SettingsPanelProps) => (
-  <section
-    id={panelId}
-    className={`settings-panel ${isOpen ? 'open' : ''}`}
-    aria-label="poem controls"
-    hidden={!isOpen}
-  >
-    <header className="settings-header">
-      <h2>settings</h2>
-      <button type="button" className="settings-close" onClick={onClose} aria-label="close settings">
-        ✕
-      </button>
-    </header>
+export const SettingsPanel = ({ isOpen, settings, panelId, onClose, onUpdate }: SettingsPanelProps) => {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+  const isIOSLike = ua
+    ? /iPad|iPhone|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)
+    : false;
 
-    <div className="settings-body">
+  return (
+    <section
+      id={panelId}
+      className={`settings-panel ${isOpen ? 'open' : ''}`}
+      aria-label="poem controls"
+      hidden={!isOpen}
+    >
+      <header className="settings-header">
+        <h2>settings</h2>
+        <button type="button" className="settings-close" onClick={onClose} aria-label="close settings">
+          ✕
+        </button>
+      </header>
+
+      <div className="settings-body">
       {settings.showModelPicker && (
         <fieldset className="settings-field">
           <legend>model</legend>
@@ -106,6 +112,7 @@ export const SettingsPanel = ({ isOpen, settings, panelId, onClose, onUpdate }: 
           </span>
           <span className="toggle-label">{settings.outboundAudioEnabled ? 'on' : 'off'}</span>
         </label>
+        {isIOSLike && <p className="settings-note">Sounds like a robot on iPhones</p>}
       </fieldset>
 
       <fieldset className="settings-field">
@@ -126,6 +133,6 @@ export const SettingsPanel = ({ isOpen, settings, panelId, onClose, onUpdate }: 
         </div>
       </fieldset>
     </div>
-  </section>
-);
-
+    </section>
+  );
+};

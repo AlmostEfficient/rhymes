@@ -11,6 +11,9 @@ const DEFAULT_VOICE_IDS: [string, string] = [
 ];
 
 const MAX_LISTEN_DURATION_MS = 12000;
+const DEFAULT_SPEECH_RATE = 1.05;
+const DEFAULT_SPEECH_PITCH = 1;
+const DEFAULT_SPEECH_VOLUME = 1;
 const SILENT_AUDIO_DATA_URI =
   'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA=';
 
@@ -236,6 +239,17 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
   const fallbackNoticeRef = useRef(false);
 
   const voices = useMemo(() => voiceIds ?? DEFAULT_VOICE_IDS, [voiceIds]);
+  const shouldUseLocalTTS = useMemo(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return false;
+    }
+
+    const ua = navigator.userAgent || '';
+    const isIOSDevice = /iPad|iPhone|iPod/i.test(ua);
+    const isTouchMac = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+
+    return (isIOSDevice || isTouchMac) && 'speechSynthesis' in window;
+  }, []);
 
   const speakWithSpeechSynthesis = useCallback(
     async (text: string, index: number, sessionId: number) => {
@@ -273,15 +287,18 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
 
       try {
         const availableVoices = await loadVoices();
+        const englishPreferred = availableVoices.filter(voice => /^en/i.test(voice.lang ?? ''));
         const utterance = new SpeechSynthesisUtterance(text);
 
-        if (availableVoices.length) {
-          const selected = availableVoices[index % availableVoices.length] ?? availableVoices[0];
-          utterance.voice = selected;
+        if (englishPreferred.length) {
+          utterance.voice = englishPreferred[index % englishPreferred.length] ?? englishPreferred[0];
+        } else if (availableVoices.length) {
+          utterance.voice = availableVoices[index % availableVoices.length] ?? availableVoices[0];
         }
 
-        utterance.rate = 1;
-        utterance.pitch = 1;
+        utterance.rate = DEFAULT_SPEECH_RATE;
+        utterance.pitch = DEFAULT_SPEECH_PITCH;
+        utterance.volume = DEFAULT_SPEECH_VOLUME;
 
         return await new Promise<boolean>(resolve => {
           const cleanup = () => {
@@ -718,8 +735,9 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
           });
           let playbackSucceeded = false;
           let lastError: unknown = null;
+          const shouldAttemptPremiumVoice = Boolean(apiKey) && !shouldUseLocalTTS;
 
-          if (apiKey) {
+          if (shouldAttemptPremiumVoice && apiKey) {
             try {
               const audioBlob = await fetchSpeech(line, voiceId, apiKey);
               console.log('[speech] runPipeline fetched audio', {
@@ -743,7 +761,12 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
             const fallbackOk = await speakWithSpeechSynthesis(line, index, sessionId);
             if (fallbackOk) {
               playbackSucceeded = true;
-              if (!fallbackNoticeRef.current && sessionId === sessionRef.current && mountedRef.current) {
+              if (
+                shouldAttemptPremiumVoice &&
+                !fallbackNoticeRef.current &&
+                sessionId === sessionRef.current &&
+                mountedRef.current
+              ) {
                 setError('Premium voice unavailable; using device speech for now.');
                 fallbackNoticeRef.current = true;
               }
@@ -779,7 +802,7 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
       }
 
     },
-    [apiKey, cancelPipeline, mountedRef, speakWithSpeechSynthesis, voices]
+    [apiKey, cancelPipeline, mountedRef, shouldUseLocalTTS, speakWithSpeechSynthesis, voices]
   );
 
   return {

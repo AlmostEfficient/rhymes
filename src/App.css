@@ -690,6 +690,14 @@ body {
   text-transform: uppercase;
 }
 
+.settings-note {
+  margin-top: 0.35rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8e857b;
+}
+
 .settings-panel.open {
   animation: panel-slide 0.18s ease;
 }

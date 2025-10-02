@@ -153,7 +153,7 @@ function App() {
   }, []);
 
   const handleStartButton = useCallback(async () => {
-    await unlockAudioPlayback();
+    void unlockAudioPlayback();
     lastNarratedRef.current = '';
     const hasMic = await ensureMicPermission();
     if (!hasMic) {
