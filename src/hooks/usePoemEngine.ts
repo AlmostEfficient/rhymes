@@ -33,7 +33,22 @@ export interface PoemSettings {
   narrativeMode: NarrativeMode;
   model: ModelProvider;
   showModelPicker: boolean;
+  outboundAudioEnabled: boolean;
 }
+
+const getDefaultSettings = (): PoemSettings => {
+  const isIOSChrome =
+    typeof navigator !== 'undefined' && /CriOS/i.test(navigator.userAgent || '');
+
+  return {
+    rhymeDifficulty: 'easy',
+    familyFriendly: true,
+    narrativeMode: 'simple',
+    model: 'openai',
+    showModelPicker: false,
+    outboundAudioEnabled: !isIOSChrome
+  };
+};
 
 const pickSupportVoices = (): [string, string] => {
   const shuffled = [...SUPPORT_VOICE_NAMES];
@@ -133,36 +148,20 @@ export const usePoemEngine = () => {
   const poemStateRef = useRef(poemState);
   const [supportVoices, setSupportVoices] = useState<[string, string]>(pickSupportVoices);
   const [settings, setSettings] = useState<PoemSettings>(() => {
+    const defaults = getDefaultSettings();
     if (typeof window === 'undefined') {
-      return {
-        rhymeDifficulty: 'easy',
-        familyFriendly: true,
-        narrativeMode: 'simple',
-        model: 'openai',
-        showModelPicker: false
-      };
+      return { ...defaults };
     }
     try {
       const saved = window.localStorage.getItem('poem_settings');
       if (!saved) {
-        return {
-          rhymeDifficulty: 'easy',
-          familyFriendly: true,
-          narrativeMode: 'simple',
-          model: 'openai',
-          showModelPicker: false
-        };
+        return { ...defaults };
       }
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      return { ...defaults, ...parsed };
     } catch (err) {
       console.error('Failed to parse saved settings:', err);
-      return {
-        rhymeDifficulty: 'easy',
-        familyFriendly: true,
-        narrativeMode: 'simple',
-        model: 'openai',
-        showModelPicker: false
-      };
+      return { ...defaults };
     }
   });
   const settingsRef = useRef(settings);
