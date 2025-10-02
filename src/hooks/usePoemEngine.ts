@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { streamChatWithMetrics } from '../lib/openai';
+import { streamChatWithMetrics as streamOpenAI } from '../lib/openai';
+import { streamChatWithMetrics as streamGemini } from '../lib/gemini';
+import { streamChatWithMetrics as streamAnthropic } from '../lib/anthropic';
 import { CHARACTERS_AND_DREAMS, SUPPORT_VOICE_NAMES } from '../constants/prompts';
 
 export interface PoemState {
@@ -23,11 +25,14 @@ export interface ArchivedPoem {
 
 export type RhymeDifficulty = 'easy' | 'medium' | 'hard';
 export type NarrativeMode = 'simple' | 'crazy';
+export type ModelProvider = 'openai' | 'gemini' | 'anthropic';
 
 export interface PoemSettings {
   rhymeDifficulty: RhymeDifficulty;
   familyFriendly: boolean;
   narrativeMode: NarrativeMode;
+  model: ModelProvider;
+  showModelPicker: boolean;
 }
 
 const pickSupportVoices = (): [string, string] => {
@@ -80,10 +85,38 @@ export const usePoemEngine = () => {
   });
   const poemStateRef = useRef(poemState);
   const [supportVoices, setSupportVoices] = useState<[string, string]>(pickSupportVoices);
-  const [settings, setSettings] = useState<PoemSettings>({
-    rhymeDifficulty: 'easy',
-    familyFriendly: true,
-    narrativeMode: 'simple'
+  const [settings, setSettings] = useState<PoemSettings>(() => {
+    if (typeof window === 'undefined') {
+      return {
+        rhymeDifficulty: 'easy',
+        familyFriendly: true,
+        narrativeMode: 'simple',
+        model: 'openai',
+        showModelPicker: false
+      };
+    }
+    try {
+      const saved = window.localStorage.getItem('poem_settings');
+      if (!saved) {
+        return {
+          rhymeDifficulty: 'easy',
+          familyFriendly: true,
+          narrativeMode: 'simple',
+          model: 'openai',
+          showModelPicker: false
+        };
+      }
+      return JSON.parse(saved);
+    } catch (err) {
+      console.error('Failed to parse saved settings:', err);
+      return {
+        rhymeDifficulty: 'easy',
+        familyFriendly: true,
+        narrativeMode: 'simple',
+        model: 'openai',
+        showModelPicker: false
+      };
+    }
   });
   const settingsRef = useRef(settings);
   const generationSessionRef = useRef(0);
@@ -104,6 +137,13 @@ export const usePoemEngine = () => {
 
   useEffect(() => {
     settingsRef.current = settings;
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem('poem_settings', JSON.stringify(settings));
+      } catch (err) {
+        console.error('Failed to save settings:', err);
+      }
+    }
   }, [settings]);
 
   useEffect(() => {
@@ -177,7 +217,12 @@ export const usePoemEngine = () => {
       let buffer = '';
 
       try {
-        for await (const { chunk } of streamChatWithMetrics(prompt)) {
+        const streamFn = 
+          settingsRef.current.model === 'gemini' ? streamGemini :
+          settingsRef.current.model === 'anthropic' ? streamAnthropic :
+          streamOpenAI;
+
+        for await (const { chunk } of streamFn(prompt)) {
           if (sessionId !== generationSessionRef.current) {
             return;
           }
@@ -225,62 +270,72 @@ export const usePoemEngine = () => {
   const buildContextPrompt = useCallback((stanzaCount: number) => {
     const { character, dream, completedStanzas, currentStanza } = poemStateRef.current;
     const topic = `The Day ${character} ${dream}`;
+    
     const previousStanzas = completedStanzas.length
-      ? `\n\nPrevious stanzas of the story:\n${completedStanzas
+      ? `\n\nHere's the story so far:\n${completedStanzas
           .map((stanza, index) => `Stanza ${index + 1}:\n${stanza.join('\n')}`)
-          .join('\n\n')}\n\nContinue this story naturally in stanza ${currentStanza}.`
+          .join('\n\n')}\n\nNow write stanza ${currentStanza} to continue naturally from where we left off.`
       : '';
-
+  
     const isFirstStanza = stanzaCount === 0;
     const isFinalStanza = poemStateRef.current.currentStanza === 4;
-
-    const stanzaRole = isFirstStanza ? 'the beginning of' : 'continuing';
-    const stanzaInstruction = isFirstStanza
-      ? '- Set the scene, introduce the dream and its obstacle, and be crystal clear the dream is still ahead'
+  
+    const stanzaGuidance = isFirstStanza
+      ? 'Set the scene and introduce the dream. Make it clear the dream is still ahead - they haven\'t achieved it yet.'
       : isFinalStanza
-        ? '- Drive the story into its climax and payoff for the dream'
-        : '- Continue the story naturally from where it left off, showing progress or setbacks while the dream stays unresolved';
-    const dreamProgressInstruction = isFinalStanza
-      ? '- Resolve the dream in this stanza and deliver a satisfying conclusion'
-      : '- Keep the dream unresolved so the next player has meaningful room to respond';
-
+        ? 'This is the climax! Time to resolve the dream and stick the landing.'
+        : 'Keep the story moving forward. Show some progress or setbacks, but don\'t resolve the dream yet - leave room for what comes next.';
+  
     const { rhymeDifficulty, familyFriendly, narrativeMode } = settingsRef.current;
-
-    const rhymeDifficultyInstruction =
+  
+    const rhymeStyle =
       rhymeDifficulty === 'easy'
-        ? '- Use playful, obvious rhymes with straightforward vocabulary'
+        ? 'Use simple, playful rhymes that are easy to follow.'
         : rhymeDifficulty === 'hard'
-          ? '- Push for inventive, unexpected rhymes and richer vocabulary'
-          : '- Keep the rhymes natural with balanced wordplay';
-
-    const familyFriendlyInstruction = familyFriendly ? '- Keep it family-friendly' : '';
-
-    const narrativeInstruction =
+          ? 'Go for creative, unexpected rhymes with richer vocabulary.'
+          : 'Keep the rhymes natural - not too obvious, not too obscure.';
+  
+    const narrativeStyle =
       narrativeMode === 'crazy'
-        ? '- Lean into surreal twists, bold imagery, and surprising turns'
-        : '- Keep the narrative grounded and coherent';
-
-    return `You are helping someone practice improv epic poems. Generate exactly 2 lines for ${stanzaRole} an epic poem about ${topic}.${previousStanzas}
-
-Requirements:
-- Lines should rhyme with each other
-- Each line must be 5-7 words maximum and follow the da-da-da-da rhythm (exactly 8 beats)
-- ${stanzaInstruction}
-- End the second line with a word that's easy to rhyme with
-- Keep it fun, dramatic, and slightly over-the-top like epic poetry
-${rhymeDifficultyInstruction}
-${narrativeInstruction}
-${familyFriendlyInstruction}
-${dreamProgressInstruction}
-
-Examples of correct 8-beat rhythm (da-da-da-da):
-"Diana woke up early and bright" (da-da-da-da-da-da-da-da)
-"She grabbed her gear to join the fight"
-"The siren called through morning light"
-"Bob climbed into his jet so fast"
-"He knew this day would be his last"
-
-Your lines must follow this exact rhythm and length. Return only the 2 lines, nothing else.`;
+        ? 'Embrace the weird! Throw in surreal twists and wild imagery.'
+        : 'Keep things grounded and logical.';
+  
+    const contentNote = familyFriendly ? '\nKeep it family-friendly.' : '';
+  
+    return `You're helping someone practice writing epic poems through improv. Write exactly 2 lines for an epic poem about "${topic}".${previousStanzas}
+  
+  Here's what you need to do:
+  - ${stanzaGuidance}
+  - The 2 lines should rhyme with each other
+	- IMPORTANT: Don't put a period at the end of the second line - the story continues with the user's line
+  - Each line needs to be 5-7 words and follow a da-da-da-da rhythm (8 beats total)
+  - End the second line with a word that's easy to rhyme with - the user will add a third line
+  - ${rhymeStyle}
+  - ${narrativeStyle}${contentNote}
+  - Keep it fun, dramatic, and over-the-top like classic epic poetry
+  
+  Good examples of the 8-beat rhythm:
+  "Diana woke up early and bright" (8 beats: da-da-da-da-da-da-da-da)
+  "She grabbed her gear to join the fight"
+  "The siren called through morning light"
+  "Bob climbed into his jet so fast"
+  "He knew this day would be his last"
+  "Maria dreamed of touching the stars"
+	"She built a rocket in her backyard"
+	"The dragon flew across the night"
+	"Its silver wings were shining bright"
+	"Tommy wanted to bake some bread"
+	"He mixed the dough and went ahead"
+	"The ocean waves were calling her"
+	"To sail beyond where waters blur"
+	"Alex raced toward the mountain peak"
+	"The treasure that he came to seek"
+	"The wizard cast a magic spell"
+	"To save the kingdom from its hell"
+	"She practiced every single day"
+	"To learn the song she'd one day play"
+  
+  Make sure your lines match this rhythm exactly. Just give me the 2 lines, nothing else.`;
   }, []);
 
   const generateTwoLines = useCallback(async () => {
@@ -294,7 +349,7 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
   const rerollPrompt = useCallback((forceImmediate?: boolean) => {
     const current = poemStateRef.current;
     const nextPrompt = getRandomPrompt(promptKey({ name: current.character, dream: current.dream }));
-    const nextState = createPoemState(nextPrompt, { hasStarted: current.hasStarted });
+    const nextState = createPoemState(nextPrompt);
 
     generationSessionRef.current++;
     clearRegisteredTimeouts();
@@ -303,11 +358,7 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
     poemStateRef.current = nextState;
     setSupportVoices(pickSupportVoices());
     setActiveArchiveId(null);
-
-    if (current.hasStarted) {
-      void generateTwoLinesForNewPoem();
-    }
-  }, [clearRegisteredTimeouts, generateTwoLinesForNewPoem]);
+  }, [clearRegisteredTimeouts]);
 
   const handleStart = useCallback(() => {
     setSupportVoices(pickSupportVoices());

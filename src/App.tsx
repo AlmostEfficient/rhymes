@@ -25,8 +25,28 @@ function App() {
   const [userInput, setUserInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [tapCount, setTapCount] = useState(0);
+  const tapTimerRef = useRef<number | null>(null);
 
   const settingsPanelId = 'poem-settings';
+
+  const handleRhythmTap = () => {
+    if (tapTimerRef.current) {
+      window.clearTimeout(tapTimerRef.current);
+    }
+
+    const nextCount = tapCount + 1;
+    setTapCount(nextCount);
+
+    if (nextCount === 8) {
+      updateSettings({ showModelPicker: !settings.showModelPicker });
+      setTapCount(0);
+    } else {
+      tapTimerRef.current = window.setTimeout(() => {
+        setTapCount(0);
+      }, 2000);
+    }
+  };
 
   const handleUserLineSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,7 +147,13 @@ function App() {
         onToggle={handleArchiveToggle}
       />
 
-      <footer className="rhythm-guide">♫ da-da, da-da, da-da, da-da ♫</footer>
+      <footer 
+        className="rhythm-guide" 
+        onClick={handleRhythmTap}
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+      >
+        ♫ da-da, da-da, da-da, da-da ♫
+      </footer>
     </div>
   );
 }

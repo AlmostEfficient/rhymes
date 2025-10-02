@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { BenchmarkData, StreamMetrics } from '../types/benchmark';
 import { calculateMetrics } from '../types/benchmark';
 
-export const MODEL_NAME = 'claude-3-haiku-20240307';
+export const MODEL_NAME = 'claude-3-5-haiku-20241022';
 
 function validateApiKey(): string {
   const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;

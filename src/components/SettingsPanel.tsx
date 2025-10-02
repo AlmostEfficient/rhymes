@@ -1,4 +1,4 @@
-import { RhymeDifficulty, NarrativeMode, PoemSettings } from '../hooks/usePoemEngine';
+import { type RhymeDifficulty, type NarrativeMode, type ModelProvider, type PoemSettings } from '../hooks/usePoemEngine';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -19,6 +19,12 @@ const NARRATIVE_OPTIONS: { value: NarrativeMode; label: string }[] = [
   { value: 'crazy', label: 'crazy' }
 ];
 
+const MODEL_OPTIONS: { value: ModelProvider; label: string }[] = [
+  { value: 'openai', label: 'GPT-4.1 Nano' },
+  { value: 'gemini', label: 'Gemini 2.0 Flash' },
+  { value: 'anthropic', label: 'Claude 3.5 Haiku' }
+];
+
 export const SettingsPanel = ({ isOpen, settings, panelId, onClose, onUpdate }: SettingsPanelProps) => (
   <section
     id={panelId}
@@ -34,6 +40,26 @@ export const SettingsPanel = ({ isOpen, settings, panelId, onClose, onUpdate }: 
     </header>
 
     <div className="settings-body">
+      {settings.showModelPicker && (
+        <fieldset className="settings-field">
+          <legend>model</legend>
+          <div className="settings-options">
+            {MODEL_OPTIONS.map(option => (
+              <label key={option.value} className={`option-chip ${settings.model === option.value ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="model"
+                  value={option.value}
+                  checked={settings.model === option.value}
+                  onChange={() => onUpdate({ model: option.value })}
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
       <fieldset className="settings-field">
         <legend>rhyme difficulty</legend>
         <div className="settings-options">

@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import { STICK_FIGURES } from '../constants/prompts';
-import { PoemState } from '../hooks/usePoemEngine';
+import { type PoemState } from '../hooks/usePoemEngine';
 
 interface PoemStageProps {
   poemState: PoemState;
