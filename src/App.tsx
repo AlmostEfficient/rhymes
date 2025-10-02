@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import './App.css';
 import { PoemStage } from './components/PoemStage';
 import { StanzaProgress } from './components/StanzaProgress';
@@ -7,6 +7,12 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { usePoemEngine } from './hooks/usePoemEngine';
 import { GearSixIcon, ArrowClockwiseIcon } from '@phosphor-icons/react';
 import { useSpeechPipeline } from './hooks/useSpeechPipeline';
+
+const RAZA_NAME = 'Raza';
+const RAZA_VOICE_ID = 'wyoowlc1iU22XqveSbUE';
+const SECONDARY_VOICE_FALLBACK_ID = 'EXAVITQu4vr4xnSDxMaL';
+const SECONDARY_VOICE_ALT_ID = 'DLsHlh26Ugcm6ELvS0qi';
+const SECONDARY_NAME_FALLBACK = 'Gui';
 
 function App() {
   const {
@@ -34,6 +40,22 @@ function App() {
 
   const settingsPanelId = 'poem-settings';
 
+  const secondarySupportName = useMemo(() => {
+    const candidates = supportVoices.filter(name => name !== RAZA_NAME);
+    const picked = candidates[0] ?? supportVoices[0] ?? SECONDARY_NAME_FALLBACK;
+    return picked === RAZA_NAME ? SECONDARY_NAME_FALLBACK : picked;
+  }, [supportVoices]);
+
+  const displayedSupportVoices = useMemo<[string, string]>(
+    () => [RAZA_NAME, `${secondarySupportName}?`],
+    [secondarySupportName]
+  );
+
+  const voiceIds = useMemo<[string, string]>(() => {
+    const secondVoiceId = Math.random() < 0.1 ? SECONDARY_VOICE_ALT_ID : SECONDARY_VOICE_FALLBACK_ID;
+    return [RAZA_VOICE_ID, secondVoiceId];
+  }, [supportVoices]);
+
   const {
     runPipeline,
     cancelPipeline,
@@ -55,7 +77,8 @@ function App() {
         }
       },
       [submitUserLine]
-    )
+    ),
+    voiceIds
   });
 
   const handleRhythmTap = () => {
@@ -252,7 +275,7 @@ function App() {
 
       <PoemStage
         poemState={poemState}
-        supportVoices={supportVoices}
+        supportVoices={displayedSupportVoices}
         userInput={userInput}
         onUserInputChange={setUserInput}
         onSubmitUserLine={handleUserLineSubmit}
