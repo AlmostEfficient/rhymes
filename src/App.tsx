@@ -35,8 +35,11 @@ function App() {
   const {
     runPipeline,
     cancelPipeline,
+    togglePause,
+    isPaused,
     isSpeaking,
     isListening,
+    activeSpeakerIndex,
     error: speechError
   } = useSpeechPipeline({
     onTranscription: text => {
@@ -85,7 +88,7 @@ function App() {
     }
 
     const firstTwo = poemState.generatedLines.slice(0, 2).filter(Boolean);
-    if (!poemState.isWaitingForUser || firstTwo.length < 2) {
+    if (!poemState.isWaitingForUser || firstTwo.length < 2 || isPaused) {
       return;
     }
 
@@ -96,7 +99,7 @@ function App() {
 
     lastNarratedRef.current = signature;
     runPipeline(firstTwo);
-  }, [cancelPipeline, poemState.currentStanza, poemState.generatedLines, poemState.isGenerating, poemState.isWaitingForUser, runPipeline]);
+  }, [cancelPipeline, isPaused, poemState.currentStanza, poemState.generatedLines, poemState.isGenerating, poemState.isWaitingForUser, runPipeline]);
 
   useEffect(() => {
     return () => {
@@ -162,6 +165,8 @@ function App() {
         onUserInputChange={setUserInput}
         onSubmitUserLine={handleUserLineSubmit}
         inputRef={inputRef as RefObject<HTMLInputElement>}
+        speakingIndex={isPaused ? null : activeSpeakerIndex}
+        isListening={isPaused ? false : isListening && poemState.isWaitingForUser}
       />
 
       {poemState.isGenerating && (
@@ -176,15 +181,23 @@ function App() {
         </div>
       )}
 
-      {(isSpeaking || isListening) && !poemState.isGenerating && (
+      {(isSpeaking || isListening || isPaused) && !poemState.isGenerating && (
         <div className="status-text" role="status" aria-live="polite">
-          {isSpeaking ? 'voicing the prophecy...' : 'listening for your rhyme...'}
+          {isPaused
+            ? 'pipeline paused'
+            : isSpeaking
+              ? 'voicing the prophecy...'
+              : 'listening for your rhyme...'}
         </div>
       )}
 
-      {!poemState.hasStarted && !poemState.isGenerating && (
+      {!poemState.hasStarted && !poemState.isGenerating ? (
         <button onClick={handleStart} className="primary-button">
           start the tale
+        </button>
+      ) : (
+        <button onClick={togglePause} className="primary-button">
+          {isPaused ? 'resume audio' : 'pause audio'}
         </button>
       )}
 

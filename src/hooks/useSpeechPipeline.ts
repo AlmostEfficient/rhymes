@@ -106,7 +106,7 @@ const fetchSpeech = async (text: string, voiceId: string, apiKey: string) => {
         stability: 0.05,
         similarity_boost: 0.9,
         style: 0.15,
-        use_speaker_boost: true,
+        use_speaker_boost: false,
         speed: 1.05
       },
       optimize_streaming_latency: 1
