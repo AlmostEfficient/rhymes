@@ -89,7 +89,6 @@ export const ArchiveSection = ({ poems, activeId, onToggle }: ArchiveSectionProp
     return stanzas;
   };
 
-  const displayPoems = filter === 'mine' ? poems : publishedPoems;
   const showFilter = poems.length > 0 || publishedPoems.length > 0;
 
   return (
