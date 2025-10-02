@@ -60,13 +60,15 @@ const sanitizeLine = (rawLine: string): string => {
   if (!line) return '';
 
   if (/[:;]$/.test(line)) {
-    return '';
+    line = line.replace(/[:;]+$/, '').trim();
   }
 
   const inlineMatch = line.match(/^(?:stanza|verse|line)\s*\d+\s*[:-]\s*(.*)$/i);
   if (inlineMatch) {
     line = inlineMatch[1]?.trim() ?? '';
   }
+
+  if (!line) return '';
 
   return line.trim();
 };
@@ -378,11 +380,7 @@ export const usePoemEngine = () => {
     await streamTwoLines(buildContextPrompt(poemStateRef.current.completedStanzas.length));
   }, [buildContextPrompt, streamTwoLines]);
 
-  const generateTwoLinesForNewPoem = useCallback(async () => {
-    await streamTwoLines(buildContextPrompt(0));
-  }, [buildContextPrompt, streamTwoLines]);
-
-  const rerollPrompt = useCallback((forceImmediate?: boolean) => {
+  const rerollPrompt = useCallback(() => {
     const current = poemStateRef.current;
     const nextPrompt = getRandomPrompt(promptKey({ name: current.character, dream: current.dream }));
     const nextState = createPoemState(nextPrompt);
@@ -451,14 +449,13 @@ export const usePoemEngine = () => {
           setArchivedPoems(prev => [completedPoem, ...prev]);
           setActiveArchiveId(completedPoem.id);
 
-          const nextState = createPoemState(undefined, { hasStarted: true });
+          generationSessionRef.current += 1;
+          clearRegisteredTimeouts();
+
+          const nextState = createPoemState();
           setPoemState(nextState);
           poemStateRef.current = nextState;
           setSupportVoices(pickSupportVoices());
-
-          registerTimeout(() => {
-            void generateTwoLinesForNewPoem();
-          }, 1000);
         } else {
           updatePoemState(prev => ({
             ...prev,
@@ -475,7 +472,7 @@ export const usePoemEngine = () => {
 
       return true;
     },
-    [generateTwoLines, generateTwoLinesForNewPoem, registerTimeout, updatePoemState]
+    [clearRegisteredTimeouts, generateTwoLines, registerTimeout, updatePoemState]
   );
 
   return {
@@ -492,4 +489,3 @@ export const usePoemEngine = () => {
     rerollPrompt
   };
 };
-

@@ -9,6 +9,8 @@ interface PoemStageProps {
   onUserInputChange(value: string): void;
   onSubmitUserLine(e: React.FormEvent): void;
   inputRef: React.RefObject<HTMLInputElement>;
+  speakingIndex?: number | null;
+  isListening?: boolean;
 }
 
 export const PoemStage = memo(
@@ -18,7 +20,9 @@ export const PoemStage = memo(
     userInput,
     onUserInputChange,
     onSubmitUserLine,
-    inputRef
+    inputRef,
+    speakingIndex = null,
+    isListening = false
   }: PoemStageProps) => {
     const linesPerFigure = useMemo(
       () => [
@@ -45,8 +49,18 @@ export const PoemStage = memo(
           const isUser = index === 2;
           const placeholderText = placeholders[index];
           const isActive = Boolean(line);
-          const label = isUser ? 'You' : supportVoices[index] || `Voice ${index + 1}`;
+          const isSpeaking = !isUser && speakingIndex === index;
+          const isUserListening = isUser && isListening;
+          const labelBase = isUser ? 'You' : supportVoices[index] || `Voice ${index + 1}`;
+          const isActiveTurn = isSpeaking || isUserListening;
+          const label = isActiveTurn ? `👉 ${labelBase}` : labelBase;
           const bubbleClasses = ['line-bubble'];
+          if (isSpeaking) {
+            bubbleClasses.push('line-speaking');
+          }
+          if (isUserListening) {
+            bubbleClasses.push('line-listening');
+          }
           const showEllipsis =
             !isUser &&
             !isActive &&
@@ -105,4 +119,3 @@ export const PoemStage = memo(
 );
 
 PoemStage.displayName = 'PoemStage';
-

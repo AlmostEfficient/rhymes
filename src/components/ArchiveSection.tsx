@@ -1,4 +1,4 @@
-import { ArchivedPoem } from '../hooks/usePoemEngine';
+import type { ArchivedPoem } from '../hooks/usePoemEngine';
 
 interface ArchiveSectionProps {
   poems: ArchivedPoem[];
@@ -78,4 +78,3 @@ export const ArchiveSection = ({ poems, activeId, onToggle }: ArchiveSectionProp
     </section>
   );
 };
-

@@ -20,6 +20,8 @@ type RecorderHandle = {
   stop(): void;
 };
 
+type RecorderErrorEvent = Event & { error?: DOMException };
+
 const validateElevenLabsKey = (): string => {
   const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
 
@@ -49,12 +51,19 @@ const readStreamToBlob = async (response: Response, contentType: string): Promis
   return new Blob(chunks, { type: contentType });
 };
 
-const playAudioBlob = async (blob: Blob, sessionId: number, activeSessionRef: React.MutableRefObject<number>, activeAudioRef: React.MutableRefObject<HTMLAudioElement | null>) => {
+const playAudioBlob = async (
+  blob: Blob,
+  sessionId: number,
+  activeSessionRef: React.MutableRefObject<number>,
+  activeAudioRef: React.MutableRefObject<HTMLAudioElement | null>
+) => {
   if (sessionId !== activeSessionRef.current) return;
 
   const objectUrl = URL.createObjectURL(blob);
   const audio = new Audio(objectUrl);
   audio.preload = 'auto';
+  audio.crossOrigin = 'anonymous';
+  audio.setAttribute('playsinline', 'true');
 
   activeAudioRef.current = audio;
 
@@ -164,6 +173,7 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeSpeakerIndex, setActiveSpeakerIndex] = useState<number | null>(null);
 
   const apiKey = useMemo(() => {
     try {
@@ -182,11 +192,14 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
   const voices = useMemo(() => voiceIds ?? DEFAULT_VOICE_IDS, [voiceIds]);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
       if (activeAudioRef.current) {
         activeAudioRef.current.pause();
-        activeAudioRef.current.src = '';
+        activeAudioRef.current.removeAttribute('src');
+        activeAudioRef.current.load();
         activeAudioRef.current = null;
       }
       if (recorderRef.current) {
@@ -216,6 +229,7 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
     stopActiveRecorder();
     setIsSpeaking(false);
     setIsListening(false);
+    setActiveSpeakerIndex(null);
   }, [stopActiveAudio, stopActiveRecorder]);
 
   const startListening = useCallback(async (sessionId: number) => {
@@ -261,7 +275,7 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
           resolve(blob);
         };
 
-        const handleError = (event: MediaRecorderErrorEvent) => {
+        const handleError = (event: RecorderErrorEvent) => {
           recorder.removeEventListener('dataavailable', handleDataAvailable);
           recorder.removeEventListener('stop', handleStop);
           reject(event.error || new Error('MediaRecorder error'));
@@ -321,8 +335,10 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
           if (!line) continue;
 
           const voiceId = voices[index % voices.length];
+          setActiveSpeakerIndex(index);
           const audioBlob = await fetchSpeech(line, voiceId, apiKey);
           await playAudioBlob(audioBlob, sessionId, sessionRef, activeAudioRef);
+          setActiveSpeakerIndex(null);
 
           if (sessionId !== sessionRef.current || !mountedRef.current) {
             return;
@@ -337,6 +353,7 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
         if (sessionId === sessionRef.current && mountedRef.current) {
           setIsSpeaking(false);
         }
+        setActiveSpeakerIndex(null);
       }
 
       await startListening(sessionId);
@@ -349,9 +366,9 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
     cancelPipeline,
     isSpeaking,
     isListening,
+    activeSpeakerIndex,
     error
   };
 };
 
 export type SpeechPipelineState = ReturnType<typeof useSpeechPipeline>;
-

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import './App.css';
 import { PoemStage } from './components/PoemStage';
 import { StanzaProgress } from './components/StanzaProgress';
@@ -29,14 +29,13 @@ function App() {
   const [tapCount, setTapCount] = useState(0);
   const tapTimerRef = useRef<number | null>(null);
   const lastNarratedRef = useRef<string>('');
+  const wasStartedRef = useRef(poemState.hasStarted);
 
   const settingsPanelId = 'poem-settings';
 
   const {
     runPipeline,
     cancelPipeline,
-    togglePause,
-    isPaused,
     isSpeaking,
     isListening,
     activeSpeakerIndex,
@@ -81,14 +80,21 @@ function App() {
     }, 100);
   };
 
+  const handleStartButton = () => {
+    lastNarratedRef.current = '';
+    handleStart();
+  };
+
+  const handleNewPoemButton = () => {
+    lastNarratedRef.current = '';
+    handleNewPoem();
+  };
+
   useEffect(() => {
-    if (poemState.isGenerating) {
-      cancelPipeline();
-      return;
-    }
+    if (poemState.isGenerating) return;
 
     const firstTwo = poemState.generatedLines.slice(0, 2).filter(Boolean);
-    if (!poemState.isWaitingForUser || firstTwo.length < 2 || isPaused) {
+    if (!poemState.isWaitingForUser || firstTwo.length < 2) {
       return;
     }
 
@@ -99,13 +105,22 @@ function App() {
 
     lastNarratedRef.current = signature;
     runPipeline(firstTwo);
-  }, [cancelPipeline, isPaused, poemState.currentStanza, poemState.generatedLines, poemState.isGenerating, poemState.isWaitingForUser, runPipeline]);
+  }, [poemState.currentStanza, poemState.generatedLines, poemState.isGenerating, poemState.isWaitingForUser, runPipeline]);
 
   useEffect(() => {
     return () => {
       cancelPipeline();
     };
   }, [cancelPipeline]);
+
+  useEffect(() => {
+    const wasStarted = wasStartedRef.current;
+    if (wasStarted && !poemState.hasStarted) {
+      cancelPipeline();
+      lastNarratedRef.current = '';
+    }
+    wasStartedRef.current = poemState.hasStarted;
+  }, [cancelPipeline, poemState.hasStarted]);
 
   return (
     <div className="app-shell">
@@ -137,7 +152,7 @@ function App() {
           className="header-prompt-toggle"
           onClick={() => {
             if (!poemState.hasStarted) {
-              rerollPrompt(true);
+              rerollPrompt();
               return;
             }
 
@@ -146,7 +161,7 @@ function App() {
             );
 
             if (confirmSwap) {
-              rerollPrompt(true);
+              rerollPrompt();
             }
           }}
         >
@@ -165,8 +180,8 @@ function App() {
         onUserInputChange={setUserInput}
         onSubmitUserLine={handleUserLineSubmit}
         inputRef={inputRef as RefObject<HTMLInputElement>}
-        speakingIndex={isPaused ? null : activeSpeakerIndex}
-        isListening={isPaused ? false : isListening && poemState.isWaitingForUser}
+        speakingIndex={activeSpeakerIndex}
+        isListening={isListening && poemState.isWaitingForUser}
       />
 
       {poemState.isGenerating && (
@@ -181,23 +196,15 @@ function App() {
         </div>
       )}
 
-      {(isSpeaking || isListening || isPaused) && !poemState.isGenerating && (
+      {(isSpeaking || isListening) && !poemState.isGenerating && (
         <div className="status-text" role="status" aria-live="polite">
-          {isPaused
-            ? 'pipeline paused'
-            : isSpeaking
-              ? 'voicing the prophecy...'
-              : 'listening for your rhyme...'}
+          {isSpeaking ? 'voicing the prophecy...' : 'listening for your rhyme...'}
         </div>
       )}
 
-      {!poemState.hasStarted && !poemState.isGenerating ? (
-        <button onClick={handleStart} className="primary-button">
+      {!poemState.hasStarted && !poemState.isGenerating && (
+        <button onClick={handleStartButton} className="primary-button">
           start the tale
-        </button>
-      ) : (
-        <button onClick={togglePause} className="primary-button">
-          {isPaused ? 'resume audio' : 'pause audio'}
         </button>
       )}
 
@@ -205,7 +212,7 @@ function App() {
         !poemState.isWaitingForUser &&
         !poemState.isGenerating &&
         poemState.currentStanza > 4 && (
-          <button onClick={handleNewPoem} className="primary-button">
+          <button onClick={handleNewPoemButton} className="primary-button">
             new prompt
           </button>
         )}
