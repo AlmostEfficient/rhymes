@@ -1,4 +1,4 @@
-import { type RhymeDifficulty, type NarrativeMode, type ModelProvider, type PoemSettings } from '../hooks/usePoemEngine';
+import { type RhymeDifficulty, type NarrativeMode, type ModelProvider, type AudioMode, type PoemSettings } from '../hooks/usePoemEngine';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -25,11 +25,15 @@ const MODEL_OPTIONS: { value: ModelProvider; label: string }[] = [
   { value: 'anthropic', label: 'Claude 3.5 Haiku' }
 ];
 
+const AUDIO_OPTIONS: { value: AudioMode; label: string }[] = [
+  { value: 'human', label: 'human' },
+  { value: 'device', label: 'robot' },
+  { value: 'none', label: 'none' }
+];
+
 export const SettingsPanel = ({ isOpen, settings, panelId, onClose, onUpdate }: SettingsPanelProps) => {
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
-  const isIOSLike = ua
-    ? /iPad|iPhone|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)
-    : false;
+  const isIOSLike = ua ? /iPad|iPhone|iPod/i.test(ua) : false;
 
   return (
     <section
@@ -100,19 +104,26 @@ export const SettingsPanel = ({ isOpen, settings, panelId, onClose, onUpdate }: 
       </fieldset>
 
       <fieldset className="settings-field">
-        <legend>Poem Audio</legend>
-        <label className={`toggle ${settings.outboundAudioEnabled ? 'on' : 'off'}`}>
-          <input
-            type="checkbox"
-            checked={settings.outboundAudioEnabled}
-            onChange={() => onUpdate({ outboundAudioEnabled: !settings.outboundAudioEnabled })}
-          />
-          <span className="toggle-track">
-            <span className="toggle-thumb" />
-          </span>
-          <span className="toggle-label">{settings.outboundAudioEnabled ? 'on' : 'off'}</span>
-        </label>
-        {isIOSLike && <p className="settings-note">Sounds like a robot on iPhones</p>}
+        <legend>poem audio</legend>
+        <div className="settings-options">
+          {AUDIO_OPTIONS.map(option => (
+            <label 
+              key={option.value} 
+              className={`option-chip ${settings.audioMode === option.value ? 'active' : ''} ${option.value === 'human' && isIOSLike ? 'disabled' : ''}`}
+            >
+              <input
+                type="radio"
+                name="audio-mode"
+                value={option.value}
+                checked={settings.audioMode === option.value}
+                disabled={option.value === 'human' && isIOSLike}
+                onChange={() => onUpdate({ audioMode: option.value })}
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+        <p className="settings-note">Human audio doesn't work on iphones</p>
       </fieldset>
 
       <fieldset className="settings-field">

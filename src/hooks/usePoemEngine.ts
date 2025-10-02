@@ -26,6 +26,7 @@ export interface ArchivedPoem {
 export type RhymeDifficulty = 'easy' | 'medium' | 'hard';
 export type NarrativeMode = 'simple' | 'crazy';
 export type ModelProvider = 'openai' | 'gemini' | 'anthropic';
+export type AudioMode = 'human' | 'device' | 'none';
 
 export interface PoemSettings {
   rhymeDifficulty: RhymeDifficulty;
@@ -33,12 +34,12 @@ export interface PoemSettings {
   narrativeMode: NarrativeMode;
   model: ModelProvider;
   showModelPicker: boolean;
-  outboundAudioEnabled: boolean;
+  audioMode: AudioMode;
 }
 
 const getDefaultSettings = (): PoemSettings => {
-  const isIOSChrome =
-    typeof navigator !== 'undefined' && /CriOS/i.test(navigator.userAgent || '');
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+  const isIOS = /iPad|iPhone|iPod/i.test(ua);
 
   return {
     rhymeDifficulty: 'easy',
@@ -46,7 +47,7 @@ const getDefaultSettings = (): PoemSettings => {
     narrativeMode: 'simple',
     model: 'openai',
     showModelPicker: false,
-    outboundAudioEnabled: !isIOSChrome
+    audioMode: isIOS ? 'device' : 'human'
   };
 };
 

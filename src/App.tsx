@@ -79,7 +79,8 @@ function App() {
       },
       [submitUserLine]
     ),
-    voiceIds
+    voiceIds,
+    audioMode: settings.audioMode
   });
 
   const handleRhythmTap = () => {
@@ -187,7 +188,7 @@ function App() {
   }, [stopRecording]);
 
   useEffect(() => {
-    if (!settings.outboundAudioEnabled) {
+    if (settings.audioMode === 'none') {
       cancelPipeline();
       lastNarratedRef.current = '';
       return;
@@ -214,7 +215,7 @@ function App() {
     poemState.isGenerating,
     poemState.isWaitingForUser,
     runPipeline,
-    settings.outboundAudioEnabled
+    settings.audioMode
   ]);
 
   useEffect(() => {

@@ -22,6 +22,7 @@ type AudioContextConstructor = typeof AudioContext;
 type UseSpeechPipelineArgs = {
   onTranscription(text: string): void;
   voiceIds?: [string, string];
+  audioMode?: 'human' | 'device' | 'none';
 };
 
 type RecorderErrorEvent = Event & { error?: DOMException };
@@ -212,7 +213,7 @@ const transcribeBlob = async (blob: Blob, apiKey: string): Promise<string> => {
   throw new Error('Unexpected transcription payload.');
 };
 
-export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipelineArgs) => {
+export const useSpeechPipeline = ({ onTranscription, voiceIds, audioMode = 'human' }: UseSpeechPipelineArgs) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -239,17 +240,6 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
   const fallbackNoticeRef = useRef(false);
 
   const voices = useMemo(() => voiceIds ?? DEFAULT_VOICE_IDS, [voiceIds]);
-  const shouldUseLocalTTS = useMemo(() => {
-    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
-      return false;
-    }
-
-    const ua = navigator.userAgent || '';
-    const isIOSDevice = /iPad|iPhone|iPod/i.test(ua);
-    const isTouchMac = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
-
-    return (isIOSDevice || isTouchMac) && 'speechSynthesis' in window;
-  }, []);
 
   const speakWithSpeechSynthesis = useCallback(
     async (text: string, index: number, sessionId: number) => {
@@ -735,9 +725,8 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
           });
           let playbackSucceeded = false;
           let lastError: unknown = null;
-          const shouldAttemptPremiumVoice = Boolean(apiKey) && !shouldUseLocalTTS;
 
-          if (shouldAttemptPremiumVoice && apiKey) {
+          if (audioMode === 'human' && apiKey) {
             try {
               const audioBlob = await fetchSpeech(line, voiceId, apiKey);
               console.log('[speech] runPipeline fetched audio', {
@@ -749,27 +738,16 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
               playbackSucceeded = true;
             } catch (err) {
               lastError = err;
-              console.warn('[speech] runPipeline elevenlabs playback failed, attempting fallback', {
+              console.error('[speech] runPipeline elevenlabs playback failed', {
                 sessionId,
                 index,
                 error: err
               });
             }
-          }
-
-          if (!playbackSucceeded) {
+          } else if (audioMode === 'device') {
             const fallbackOk = await speakWithSpeechSynthesis(line, index, sessionId);
             if (fallbackOk) {
               playbackSucceeded = true;
-              if (
-                shouldAttemptPremiumVoice &&
-                !fallbackNoticeRef.current &&
-                sessionId === sessionRef.current &&
-                mountedRef.current
-              ) {
-                setError('Premium voice unavailable; using device speech for now.');
-                fallbackNoticeRef.current = true;
-              }
             }
           }
 
@@ -802,7 +780,7 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
       }
 
     },
-    [apiKey, cancelPipeline, mountedRef, shouldUseLocalTTS, speakWithSpeechSynthesis, voices]
+    [apiKey, audioMode, cancelPipeline, mountedRef, speakWithSpeechSynthesis, voices]
   );
 
   return {

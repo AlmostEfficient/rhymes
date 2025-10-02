@@ -645,6 +645,12 @@ body {
   color: #f9f6f1;
 }
 
+.option-chip.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .toggle {
   display: inline-flex;
   align-items: center;
