@@ -61,6 +61,7 @@ function App() {
     cancelPipeline,
     startRecording,
     stopRecording,
+    unlockAudioPlayback,
     isSpeaking,
     isListening,
     activeSpeakerIndex,
@@ -152,13 +153,14 @@ function App() {
   }, []);
 
   const handleStartButton = useCallback(async () => {
+    await unlockAudioPlayback();
     lastNarratedRef.current = '';
     const hasMic = await ensureMicPermission();
     if (!hasMic) {
       return;
     }
     handleStart();
-  }, [ensureMicPermission, handleStart]);
+  }, [ensureMicPermission, handleStart, unlockAudioPlayback]);
 
   const handleNewPoemButton = () => {
     lastNarratedRef.current = '';

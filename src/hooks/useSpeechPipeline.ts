@@ -12,6 +12,8 @@ const DEFAULT_VOICE_IDS: [string, string] = [
 
 const MAX_LISTEN_DURATION_MS = 12000;
 
+type AudioContextConstructor = typeof AudioContext;
+
 type UseSpeechPipelineArgs = {
   onTranscription(text: string): void;
   voiceIds?: [string, string];
@@ -225,8 +227,95 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
   const recordingRef = useRef<RecordingContext | null>(null);
   const wantsRecordingRef = useRef(false);
   const mountedRef = useRef(true);
+  const unlockedAudioRef = useRef(false);
+  const unlockingPromiseRef = useRef<Promise<boolean> | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const fallbackNoticeRef = useRef(false);
 
   const voices = useMemo(() => voiceIds ?? DEFAULT_VOICE_IDS, [voiceIds]);
+
+  const speakWithSpeechSynthesis = useCallback(
+    async (text: string, index: number, sessionId: number) => {
+      if (!text) return true;
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        return false;
+      }
+
+      const synth = window.speechSynthesis;
+      if (!synth) return false;
+
+      const loadVoices = async () => {
+        const existing = synth.getVoices();
+        if (existing.length) {
+          return existing;
+        }
+
+        return await new Promise<SpeechSynthesisVoice[]>(resolve => {
+          const handle = () => {
+            const loaded = synth.getVoices();
+            if (loaded.length) {
+              synth.removeEventListener('voiceschanged', handle);
+              resolve(loaded);
+            }
+          };
+
+          synth.addEventListener('voiceschanged', handle);
+
+          window.setTimeout(() => {
+            synth.removeEventListener('voiceschanged', handle);
+            resolve(synth.getVoices());
+          }, 1000);
+        });
+      };
+
+      try {
+        const availableVoices = await loadVoices();
+        const utterance = new SpeechSynthesisUtterance(text);
+
+        if (availableVoices.length) {
+          const selected = availableVoices[index % availableVoices.length] ?? availableVoices[0];
+          utterance.voice = selected;
+        }
+
+        utterance.rate = 1;
+        utterance.pitch = 1;
+
+        return await new Promise<boolean>(resolve => {
+          const cleanup = () => {
+            utterance.onend = null;
+            utterance.onerror = null;
+          };
+
+          utterance.onend = () => {
+            cleanup();
+            if (sessionId !== sessionRef.current || !mountedRef.current) {
+              resolve(false);
+              return;
+            }
+            resolve(true);
+          };
+
+          utterance.onerror = () => {
+            cleanup();
+            resolve(false);
+          };
+
+          try {
+            synth.cancel();
+            synth.speak(utterance);
+          } catch (err) {
+            console.error('[speech] speechSynthesis speak failed', { sessionId, error: err });
+            cleanup();
+            resolve(false);
+          }
+        });
+      } catch (err) {
+        console.error('[speech] speechSynthesis fallback error', { sessionId, error: err });
+        return false;
+      }
+    },
+    [mountedRef, sessionRef]
+  );
 
   const finalizeRecording = useCallback(
     async (shouldSubmit: boolean) => {
@@ -339,6 +428,10 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
     setIsListening(false);
     setActiveSpeakerIndex(null);
     wantsRecordingRef.current = false;
+    fallbackNoticeRef.current = false;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
   }, [finalizeRecording, stopActiveAudio]);
 
   useEffect(() => {
@@ -352,9 +445,75 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
         activeAudioRef.current.load();
         activeAudioRef.current = null;
       }
+      if (audioContextRef.current) {
+        const context = audioContextRef.current;
+        audioContextRef.current = null;
+        void context.close().catch(() => {});
+      }
       void finalizeRecording(false);
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, [finalizeRecording]);
+
+  const unlockAudioPlayback = useCallback(async () => {
+    if (unlockedAudioRef.current) return true;
+    if (typeof window === 'undefined') return false;
+
+    if (unlockingPromiseRef.current) {
+      return unlockingPromiseRef.current;
+    }
+
+    const promise = (async () => {
+      try {
+        const contextCtor: AudioContextConstructor | undefined =
+          window.AudioContext ?? (window as typeof window & { webkitAudioContext?: AudioContextConstructor }).webkitAudioContext;
+        if (!contextCtor) {
+          unlockedAudioRef.current = true;
+          return true;
+        }
+
+        if (!audioContextRef.current) {
+          audioContextRef.current = new contextCtor();
+        }
+
+        const context = audioContextRef.current;
+        if (!context) {
+          unlockedAudioRef.current = true;
+          return true;
+        }
+
+        if (context.state === 'suspended') {
+          await context.resume();
+        }
+
+        const buffer = context.createBuffer(1, 1, context.sampleRate);
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        source.connect(context.destination);
+        source.start(0);
+
+        if (context.state === 'suspended') {
+          await context.resume();
+        }
+
+        source.stop();
+        source.disconnect();
+
+        unlockedAudioRef.current = true;
+        return true;
+      } catch (err) {
+        console.warn('[speech] unlockAudioPlayback failed', err);
+        return false;
+      } finally {
+        unlockingPromiseRef.current = null;
+      }
+    })();
+
+    unlockingPromiseRef.current = promise;
+    return promise;
+  }, []);
 
   const startRecording = useCallback(async () => {
     if (!apiKey || !mountedRef.current) return false;
@@ -482,7 +641,6 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
 
   const runPipeline = useCallback(
     async (lines: string[]) => {
-      if (!apiKey) return;
       if (!lines.length) return;
 
       console.log('[speech] runPipeline invoked', {
@@ -494,6 +652,7 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
 
       const sessionId = ++sessionRef.current;
       setError(null);
+      fallbackNoticeRef.current = false;
 
       console.log('[speech] runPipeline session start', { sessionId });
 
@@ -513,13 +672,47 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
             length: line.length,
             sample: line.slice(0, 80)
           });
-          const audioBlob = await fetchSpeech(line, voiceId, apiKey);
-          console.log('[speech] runPipeline fetched audio', {
-            sessionId,
-            index,
-            size: audioBlob.size
-          });
-          await playAudioBlob(audioBlob, sessionId, sessionRef, activeAudioRef);
+          let playbackSucceeded = false;
+          let lastError: unknown = null;
+
+          if (apiKey) {
+            try {
+              const audioBlob = await fetchSpeech(line, voiceId, apiKey);
+              console.log('[speech] runPipeline fetched audio', {
+                sessionId,
+                index,
+                size: audioBlob.size
+              });
+              await playAudioBlob(audioBlob, sessionId, sessionRef, activeAudioRef);
+              playbackSucceeded = true;
+            } catch (err) {
+              lastError = err;
+              console.warn('[speech] runPipeline elevenlabs playback failed, attempting fallback', {
+                sessionId,
+                index,
+                error: err
+              });
+            }
+          }
+
+          if (!playbackSucceeded) {
+            const fallbackOk = await speakWithSpeechSynthesis(line, index, sessionId);
+            if (fallbackOk) {
+              playbackSucceeded = true;
+              if (!fallbackNoticeRef.current && sessionId === sessionRef.current && mountedRef.current) {
+                setError('Premium voice unavailable; using device speech for now.');
+                fallbackNoticeRef.current = true;
+              }
+            }
+          }
+
+          if (!playbackSucceeded) {
+            const errorToThrow = lastError instanceof Error
+              ? lastError
+              : new Error('Unable to play narration with available voices.');
+            throw errorToThrow;
+          }
+
           setActiveSpeakerIndex(null);
 
           if (sessionId !== sessionRef.current || !mountedRef.current) {
@@ -542,7 +735,7 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
       }
 
     },
-    [apiKey, cancelPipeline, voices]
+    [apiKey, cancelPipeline, mountedRef, speakWithSpeechSynthesis, voices]
   );
 
   return {
@@ -550,6 +743,7 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
     cancelPipeline,
     startRecording,
     stopRecording,
+    unlockAudioPlayback,
     isSpeaking,
     isListening,
     activeSpeakerIndex,
