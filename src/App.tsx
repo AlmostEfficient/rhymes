@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { streamChatWithMetrics } from './lib/openai';
 import './App.css'
 
@@ -27,6 +27,43 @@ const CHARACTERS_AND_DREAMS = [
   { name: 'Alex', dream: 'learned to fly' }
 ];
 
+const STICK_FIGURES = [
+  `  O
+ /|\\
+ / \\`,
+  `  O
+ /|\\
+ / \\`,
+  `  O
+ /|\\
+ / \\`
+];
+
+const SUPPORT_VOICE_NAMES = [
+  'Raza',
+  'Artemis',
+  'Diana',
+  'Marin',
+  'Anna',
+  'MJ',
+  'Lisa',
+  'Sam',
+  'Adrienne',
+  'Ivan',
+  'Lauren',
+  'Gui',
+  'Brody'
+];
+
+const pickSupportVoices = (): [string, string] => {
+  const shuffled = [...SUPPORT_VOICE_NAMES];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return [shuffled[0], shuffled[1]];
+};
+
 function App() {
   const [poemState, setPoemState] = useState<PoemState>(() => {
     const randomPrompt = CHARACTERS_AND_DREAMS[Math.floor(Math.random() * CHARACTERS_AND_DREAMS.length)];
@@ -44,38 +81,44 @@ function App() {
   });
   
   const [userInput, setUserInput] = useState('');
-  const [titleAnimated, setTitleAnimated] = useState(false);
+  const [supportVoices, setSupportVoices] = useState<[string, string]>(pickSupportVoices);
   const inputRef = useRef<HTMLInputElement>(null);
+  const poemStateRef = useRef(poemState);
 
-  useEffect(() => {
-    setTimeout(() => setTitleAnimated(true), 500);
-  }, []);
+  const updatePoemState = (updater: (prev: PoemState) => PoemState) => {
+    setPoemState(prev => {
+      const next = updater(prev);
+      poemStateRef.current = next;
+      return next;
+    });
+  };
 
   const generateTwoLines = async () => {
-    setPoemState(prev => ({ ...prev, isGenerating: true }));
+    updatePoemState(prev => ({ ...prev, isGenerating: true }));
     
-    const topic = `The Day ${poemState.character} ${poemState.dream}`;
+    const { character, dream, completedStanzas, currentStanza } = poemStateRef.current;
+    const topic = `The Day ${character} ${dream}`;
     
     // Build context from previous stanzas
     let storyContext = '';
-    if (poemState.completedStanzas.length > 0) {
+    if (completedStanzas.length > 0) {
       storyContext = '\n\nPrevious stanzas of the story:\n';
-      poemState.completedStanzas.forEach((stanza, index) => {
+      completedStanzas.forEach((stanza, index) => {
         storyContext += `Stanza ${index + 1}:\n${stanza[0]}\n${stanza[1]}\n${stanza[2]}\n\n`;
       });
-      storyContext += `Continue this story naturally in stanza ${poemState.currentStanza}.`;
+      storyContext += `Continue this story naturally in stanza ${currentStanza}.`;
     }
     
-    const prompt = `You are helping someone practice improv epic poems. Generate exactly 2 lines for ${poemState.currentStanza === 1 ? 'the beginning of' : 'continuing'} an epic poem about ${topic}.${storyContext}
+    const prompt = `You are helping someone practice improv epic poems. Generate exactly 2 lines for ${currentStanza === 1 ? 'the beginning of' : 'continuing'} an epic poem about ${topic}.${storyContext}
 
 Requirements:
 - Lines should rhyme with each other
-- Each line must be 6-8 words maximum and follow the da-da-da-da rhythm (exactly 8 beats)
-- ${poemState.currentStanza === 1 ? 'Start the story and set the scene' : 'Continue the story naturally from where it left off'}
+- Each line must be 5-7 words maximum and follow the da-da-da-da rhythm (exactly 8 beats)
+- ${currentStanza === 1 ? 'Start the story and set the scene' : 'Continue the story naturally from where it left off'}
 - End the second line with a word that's easy to rhyme with
 - Keep it fun, dramatic, and slightly over-the-top like epic poetry
 - Make it family-friendly
-${poemState.currentStanza === 4 ? '- This is the final stanza, bring the story to a satisfying conclusion' : ''}
+${currentStanza === 4 ? '- This is the final stanza, bring the story to a satisfying conclusion' : ''}
 
 Examples of correct 8-beat rhythm (da-da-da-da):
 "Diana woke up early and bright" (da-da-da-da-da-da-da-da)
@@ -94,7 +137,7 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
       
       const lines = response.trim().split('\n').filter(line => line.trim()).slice(0, 2);
       
-      setPoemState(prev => ({
+      updatePoemState(prev => ({
         ...prev,
         generatedLines: lines,
         isGenerating: false,
@@ -106,13 +149,14 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
       
     } catch (error) {
       console.error('Error generating lines:', error);
-      setPoemState(prev => ({ ...prev, isGenerating: false }));
+      updatePoemState(prev => ({ ...prev, isGenerating: false }));
     }
   };
 
   const generateTwoLinesForNewPoem = async () => {
     // This function is called after state has been reset for a new poem
-    const prompt = `You are helping someone practice improv epic poems. Generate exactly 2 lines for the beginning of an epic poem about The Day ${poemState.character} ${poemState.dream}.
+    const { character, dream } = poemStateRef.current;
+    const prompt = `You are helping someone practice improv epic poems. Generate exactly 2 lines for the beginning of an epic poem about The Day ${character} ${dream}.
 
 Requirements:
 - Lines should rhyme with each other
@@ -139,7 +183,7 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
       
       const lines = response.trim().split('\n').filter(line => line.trim()).slice(0, 2);
       
-      setPoemState(prev => ({
+      updatePoemState(prev => ({
         ...prev,
         generatedLines: lines,
         isGenerating: false,
@@ -151,24 +195,26 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
       
     } catch (error) {
       console.error('Error generating lines:', error);
-      setPoemState(prev => ({ ...prev, isGenerating: false }));
+      updatePoemState(prev => ({ ...prev, isGenerating: false }));
     }
   };
 
   const handleStart = () => {
-    setPoemState(prev => ({ ...prev, hasStarted: true }));
+    setSupportVoices(pickSupportVoices());
+    updatePoemState(prev => ({ ...prev, hasStarted: true }));
     generateTwoLines();
   };
 
   const handleUserLineSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userInput.trim() || !poemState.isWaitingForUser) return;
+    const current = poemStateRef.current;
+    if (!userInput.trim() || !current.isWaitingForUser) return;
 
     const userLine = userInput.trim();
-    const completedStanza = [poemState.generatedLines[0], poemState.generatedLines[1], userLine];
-    const currentStanzaNum = poemState.currentStanza;
+    const completedStanza = [current.generatedLines[0], current.generatedLines[1], userLine];
+    const currentStanzaNum = current.currentStanza;
 
-    setPoemState(prev => ({
+    updatePoemState(prev => ({
       ...prev,
       userLine: userLine,
       isWaitingForUser: false,
@@ -184,7 +230,7 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
       if (nextStanza > 4) {
         // Start new poem
         const newPrompt = CHARACTERS_AND_DREAMS[Math.floor(Math.random() * CHARACTERS_AND_DREAMS.length)];
-        setPoemState({
+        const nextState: PoemState = {
           character: newPrompt.name,
           dream: newPrompt.dream,
           currentStanza: 1,
@@ -194,16 +240,19 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
           isWaitingForUser: false,
           hasStarted: true,
           completedStanzas: []
-        });
+        };
+        setPoemState(nextState);
+        poemStateRef.current = nextState;
+        setSupportVoices(pickSupportVoices());
         // Auto-start next poem
         setTimeout(() => {
           // Need to call generateTwoLines with fresh state, so use a callback
-          setPoemState(prev => ({ ...prev, isGenerating: true }));
+          updatePoemState(prev => ({ ...prev, isGenerating: true }));
           generateTwoLinesForNewPoem();
         }, 1000);
       } else {
         // Next stanza of current poem
-        setPoemState(prev => ({
+        updatePoemState(prev => ({
           ...prev,
           currentStanza: nextStanza,
           generatedLines: [],
@@ -219,7 +268,7 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
 
   const handleNewPoem = () => {
     const newPrompt = CHARACTERS_AND_DREAMS[Math.floor(Math.random() * CHARACTERS_AND_DREAMS.length)];
-    setPoemState({
+    const nextState: PoemState = {
       character: newPrompt.name,
       dream: newPrompt.dream,
       currentStanza: 1,
@@ -229,71 +278,140 @@ Your lines must follow this exact rhythm and length. Return only the 2 lines, no
       isWaitingForUser: false,
       hasStarted: false,
       completedStanzas: []
-    });
+    };
+    setPoemState(nextState);
+    poemStateRef.current = nextState;
+    setSupportVoices(pickSupportVoices());
     setUserInput('');
   };
 
+  const linesPerFigure = [
+    poemState.generatedLines[0] ?? '',
+    poemState.generatedLines[1] ?? '',
+    poemState.userLine ?? ''
+  ];
+
+  const placeholders = [
+    poemState.hasStarted ? 'waiting on the next beat' : 'tap start to begin',
+    poemState.hasStarted ? 'warming up the echo' : 'setting the scene',
+    ''
+  ];
+
   return (
-    <div className="app-container">
-      <div className={`main-title ${titleAnimated ? 'animated' : ''}`}>
-        Epic Poem Practice
-      </div>
-      
-      <div className="subtitle">
-        The Day <span className="character-name">{poemState.character}</span> <span className="dream-text">{poemState.dream}</span>
-      </div>
-      
-      <div className="stanza-progress">
-        {poemState.hasStarted && `Stanza ${poemState.currentStanza}/4`}
-      </div>
-      
-      <div className="poem-lines">
-        <div className="line-slot line-1">
-          {poemState.generatedLines[0] || ''}
-        </div>
-        <div className="line-slot line-2">
-          {poemState.generatedLines[1] || ''}
-        </div>
-        <div className="line-slot line-3">
-          {poemState.userLine || (poemState.isWaitingForUser ? '← Your line goes here' : '')}
-        </div>
-      </div>
-      
+    <div className="app-shell">
+      <header className="header">
+        <h1>Epic Poem Practice</h1>
+        <p>
+          The Day <span className="header-emphasis">{poemState.character}</span> <span className="header-emphasis">{poemState.dream}</span>
+        </p>
+      </header>
+
+      <main className="poem-stage">
+        {STICK_FIGURES.map((figure, index) => {
+          const line = linesPerFigure[index];
+          const isUser = index === 2;
+          const placeholderText = placeholders[index];
+          const isActive = Boolean(line);
+          const label = isUser ? 'You' : supportVoices[index] || `Voice ${index + 1}`;
+          const bubbleClasses = ['line-bubble'];
+          const showEllipsis =
+            !isUser &&
+            !isActive &&
+            poemState.hasStarted &&
+            poemState.completedStanzas.length > 0 &&
+            poemState.isGenerating;
+
+          if (isActive) {
+            bubbleClasses.push('line-visible');
+          } else if (!isUser && !showEllipsis) {
+            bubbleClasses.push('line-placeholder');
+          }
+
+          return (
+            <section
+              className="poem-line"
+              key={`figure-${index}-${poemState.currentStanza}-${line || 'blank'}`}
+            >
+              <div className="figure-wrapper">
+                <pre aria-hidden="true">{figure}</pre>
+                <span className="figure-label">{label}</span>
+              </div>
+              <div className={bubbleClasses.join(' ')}>
+                {isUser ? (
+                  poemState.isWaitingForUser ? (
+                    <form onSubmit={handleUserLineSubmit} className="inline-input-form">
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={userInput}
+                        onChange={(e) => setUserInput(e.target.value)}
+                        placeholder="drop an 8-beat rhyme here"
+                        className="inline-input"
+                        autoFocus
+                      />
+                    </form>
+                  ) : (
+                    line || placeholderText
+                  )
+                ) : showEllipsis ? (
+                  <span className="ellipsis" aria-hidden="true">
+                    <span>.</span>
+                    <span>.</span>
+                    <span>.</span>
+                  </span>
+                ) : (
+                  line || placeholderText
+                )}
+              </div>
+            </section>
+          );
+        })}
+      </main>
+
       {poemState.isGenerating && (
-        <div className="generating">
-          Generating epic lines...
+        <div className="status-text" role="status" aria-live="polite">
+          thinking up the next couplet...
         </div>
       )}
-      
-      {poemState.isWaitingForUser && (
-        <form onSubmit={handleUserLineSubmit} className="input-form">
-          <input
-            ref={inputRef}
-            type="text"
-            value={userInput}
-            onChange={(e) => setUserInput(e.target.value)}
-            placeholder="Complete the stanza with your rhyming line..."
-            className="line-input"
-            autoFocus
-          />
-        </form>
-      )}
-      
-      {!poemState.hasStarted && (
-        <button onClick={handleStart} className="start-button">
-          Start Epic Poem
+
+      {!poemState.hasStarted && !poemState.isGenerating && (
+        <button onClick={handleStart} className="primary-button">
+          start the tale
         </button>
       )}
-      
-      {poemState.hasStarted && !poemState.isWaitingForUser && !poemState.isGenerating && poemState.currentStanza > 4 && (
-        <button onClick={handleNewPoem} className="new-poem-button">
-          New Poem
-        </button>
+
+      {poemState.hasStarted &&
+        !poemState.isWaitingForUser &&
+        !poemState.isGenerating &&
+        poemState.currentStanza > 4 && (
+          <button onClick={handleNewPoem} className="primary-button">
+            new prompt
+          </button>
+        )}
+
+      {poemState.hasStarted && (
+        <div className="stanza-progress" aria-live="polite">
+          <span className="progress-label"></span>
+          <div className="progress-lines">
+            {Array.from({ length: 4 }).map((_, idx) => {
+              const status = poemState.currentStanza - 1 > idx
+                ? 'completed'
+                : poemState.currentStanza - 1 === idx
+                  ? 'current'
+                  : 'upcoming';
+              return (
+                <span
+                  key={`stanza-indicator-${idx}`}
+                  className={`progress-line ${status}`}
+                  aria-hidden="true"
+                />
+              );
+            })}
+          </div>
+        </div>
       )}
-      
-      <div className="rhythm-guide">
-        da-da, da-da, da-da, da-da ♫
-      </div>
+
+      <footer className="rhythm-guide">♫ da-da, da-da, da-da, da-da ♫</footer>
     </div>
   );
 }

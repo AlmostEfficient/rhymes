@@ -1,245 +1,321 @@
+:root {
+  color-scheme: only light;
+}
+
 #root {
+  min-height: 100vh;
+  background: #f4f1eb;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: #2a2522;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
   margin: 0;
-  padding: 0;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
 }
 
-.app-container {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 2rem;
+.app-shell {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: 1.5rem;
+  gap: 2rem;
+}
+
+.header {
   text-align: center;
-  font-family: 'Georgia', 'Times New Roman', serif;
-}
-
-.main-title {
-  font-size: 2.5rem;
-  font-weight: bold;
-  margin-bottom: 1rem;
-  color: #e8f4f8;
-  opacity: 0;
-  transform: translateY(-20px);
-  transition: all 0.8s ease;
-  min-height: 3rem;
-  text-shadow: 0 0 20px rgba(232, 244, 248, 0.3);
-}
-
-.main-title.animated {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.subtitle {
-  font-size: 1.5rem;
-  color: #a8c8ec;
-  margin-bottom: 2rem;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.character-name {
-  color: #64b5f6;
-  font-weight: bold;
-}
-
-.dream-text {
-  color: #81c784;
-  font-style: italic;
-}
-
-.stanza-progress {
-  font-size: 1.1rem;
-  color: #90caf9;
-  margin-bottom: 2rem;
-  font-weight: 500;
-}
-
-.poem-lines {
   display: flex;
   flex-direction: column;
-  justify-content: space-around;
-  margin: 2rem 0;
-  height: 240px;
-  padding: 2rem;
-  background: rgba(26, 32, 44, 0.8);
-  border-radius: 20px;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
-  border: 1px solid rgba(120, 144, 156, 0.2);
-  backdrop-filter: blur(10px);
+  gap: 0.3rem;
+  width: 100%;
+  max-width: 560px;
 }
 
-.line-slot {
-  font-size: 1.2rem;
-  line-height: 1.4;
-  margin: 0.5rem 0;
-  padding: 1rem;
-  color: #e8f4f8;
-  height: 50px;
-  min-width: 400px;
-  opacity: 0;
-  animation: fadeIn 0.8s ease forwards;
-  font-weight: 500;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(120, 144, 156, 0.1);
+.header h1 {
+  font-size: clamp(1.8rem, 4.5vw, 2.4rem);
+  margin: 0;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+.header p {
+  margin: 0;
+  font-size: clamp(1rem, 3.2vw, 1.2rem);
+}
+
+.header-emphasis {
+  font-weight: 600;
+}
+
+.stanza-count {
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.progress-track {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  margin-bottom: 0.2rem;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+}
+
+.progress-label {
+  text-transform: uppercase;
+}
+
+.progress-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.progress-divider,
+.progress-total {
+  opacity: 0.65;
+}
+
+.poem-stage {
+  display: grid;
+  gap: 1.2rem;
+  width: 100%;
+  max-width: 560px;
+}
+
+.poem-line {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.figure-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+}
+
+.figure-wrapper pre {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.1;
+}
+
+.figure-label {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.line-bubble {
+  flex: 1;
+  min-height: 3.5rem;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  border: 1px solid #d9d2c7;
+  background: #fffefc;
   display: flex;
   align-items: center;
-  justify-content: center;
-  text-align: center;
+  font-size: 1.05rem;
+  line-height: 1.4;
+  overflow: hidden;
+  position: relative;
 }
 
-.line-slot.line-1 {
-  animation-delay: 0.2s;
-}
-
-.line-slot.line-2 {
-  animation-delay: 0.4s;
-}
-
-.line-slot.line-3 {
-  animation-delay: 0.6s;
-  color: #81c784;
+.line-placeholder {
+  color: #9d948c;
   font-style: italic;
 }
 
-@keyframes fadeIn {
+.line-visible {
+  animation: slide-in 0.45s ease-out;
+}
+
+@keyframes slide-in {
   from {
+    transform: translateX(-12px);
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
+    transform: translateX(0);
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
-.stanza-break {
-  height: 2rem;
-}
-
-.generating {
+.status-text {
+  font-size: 0.95rem;
   font-style: italic;
-  color: #90caf9;
-  margin: 1rem 0;
-  animation: pulse 1.5s infinite;
-  font-size: 1.1rem;
+  color: #6b645d;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
-
-.input-form {
+.inline-input-form {
   width: 100%;
-  margin: 2rem 0;
+  display: flex;
 }
 
-.line-input {
+.inline-input {
   width: 100%;
-  font-size: 1.2rem;
-  padding: 1rem;
-  border: 2px solid #456b7a;
-  border-radius: 12px;
-  text-align: center;
-  font-family: 'Georgia', 'Times New Roman', serif;
-  background: rgba(26, 32, 44, 0.9);
-  color: #e8f4f8;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-}
-
-.line-input:focus {
-  outline: none;
-  border-color: #64b5f6;
-  box-shadow: 0 6px 25px rgba(100, 181, 246, 0.4);
-  transform: translateY(-2px);
-  background: rgba(26, 32, 44, 1);
-}
-
-.line-input::placeholder {
-  color: #90a4ae;
-  font-style: italic;
-}
-
-.start-button, .new-poem-button {
-  font-size: 1.3rem;
-  padding: 1rem 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  font-size: 1.05rem;
+  padding: 0.2rem 0;
   border: none;
-  border-radius: 25px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+}
+
+.inline-input:focus {
+  outline: none;
+}
+
+.primary-button {
+  border: 1px solid #2a2522;
+  background: transparent;
+  color: inherit;
+  padding: 0.9rem 1.6rem;
+  border-radius: 999px;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   cursor: pointer;
-  font-family: 'Georgia', 'Times New Roman', serif;
-  font-weight: bold;
-  transition: all 0.3s ease;
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
-  margin: 1rem;
 }
 
-.start-button:hover, .new-poem-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
-}
-
-.start-button:active, .new-poem-button:active {
-  transform: translateY(0);
+.primary-button:focus {
+  outline: 2px solid #2a2522;
+  outline-offset: 3px;
 }
 
 .rhythm-guide {
-  position: fixed;
-  bottom: 2rem;
-  right: 2rem;
-  background: rgba(26, 32, 44, 0.9);
-  color: #90caf9;
-  padding: 0.8rem 1.2rem;
-  border-radius: 25px;
-  font-family: monospace;
-  font-size: 1rem;
-  opacity: 0.8;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(120, 144, 156, 0.2);
+  margin-top: auto;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  color: #6b645d;
 }
 
-@media (max-width: 768px) {
-  .app-container {
+.stanza-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  color: #6b645d;
+}
+
+.progress-lines {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(48px, 1fr));
+  gap: 0.4rem;
+}
+
+.progress-line {
+  display: inline-block;
+  height: 2px;
+  border-radius: 999px;
+  background: #d2cabe;
+}
+
+.progress-line.completed {
+  background: #2a2522;
+}
+
+.progress-line.current {
+  background: #2a2522;
+  height: 4px;
+}
+
+.progress-dots {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.progress-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid #bcb4aa;
+  background: transparent;
+  display: inline-block;
+}
+
+.progress-dot.completed {
+  background: #2a2522;
+}
+
+.progress-dot.current {
+  background: #2a2522;
+  box-shadow: 0 0 0 2px rgba(42, 37, 34, 0.25);
+}
+
+.ellipsis {
+  display: inline-flex;
+  gap: 0.2rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.1em;
+  color: #9d948c;
+}
+
+.ellipsis span {
+  animation: ellipsis-bounce 1.2s infinite ease-in-out;
+}
+
+.ellipsis span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.ellipsis span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes ellipsis-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .app-shell {
     padding: 1rem;
+    gap: 1.6rem;
   }
-  
-  .main-title {
-    font-size: 2rem;
+
+  .header {
+    gap: 0.25rem;
   }
-  
-  .subtitle {
-    font-size: 1.2rem;
+
+  .progress-track {
+    font-size: 0.8rem;
   }
-  
-  .line-slot {
-    font-size: 1.2rem;
-    padding: 0.8rem;
+
+  .figure-wrapper {
+    min-width: 64px;
   }
-  
-  .line-input {
-    font-size: 1rem;
+
+  .figure-wrapper pre {
+    font-size: 0.9rem;
   }
-  
-  .poem-lines {
-    padding: 1.5rem;
-    height: 200px;
+
+  .poem-line {
+    gap: 0.6rem;
   }
-  
-  .line-slot {
-    min-width: 280px;
-    height: 40px;
+
+  .line-bubble {
+    padding: 0.75rem 0.85rem;
+    min-height: 2.8rem;
+    font-size: 0.98rem;
   }
-  
-  .rhythm-guide {
-    position: static;
-    margin-top: 2rem;
+
+  .inline-input {
+    font-size: 0.98rem;
   }
 }
