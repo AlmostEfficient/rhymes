@@ -11,6 +11,8 @@ const DEFAULT_VOICE_IDS: [string, string] = [
 ];
 
 const MAX_LISTEN_DURATION_MS = 12000;
+const SILENT_AUDIO_DATA_URI =
+  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA=';
 
 type AudioContextConstructor = typeof AudioContext;
 
@@ -230,6 +232,7 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
   const unlockedAudioRef = useRef(false);
   const unlockingPromiseRef = useRef<Promise<boolean> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioUnlockElementRef = useRef<HTMLAudioElement | null>(null);
   const fallbackNoticeRef = useRef(false);
 
   const voices = useMemo(() => voiceIds ?? DEFAULT_VOICE_IDS, [voiceIds]);
@@ -445,6 +448,15 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
         activeAudioRef.current.load();
         activeAudioRef.current = null;
       }
+      if (audioUnlockElementRef.current) {
+        try {
+          audioUnlockElementRef.current.pause();
+          audioUnlockElementRef.current.removeAttribute('src');
+        } catch (err) {
+          // ignore cleanup errors
+        }
+        audioUnlockElementRef.current = null;
+      }
       if (audioContextRef.current) {
         const context = audioContextRef.current;
         audioContextRef.current = null;
@@ -467,42 +479,74 @@ export const useSpeechPipeline = ({ onTranscription, voiceIds }: UseSpeechPipeli
 
     const promise = (async () => {
       try {
+        let audioUnlocked = false;
+
         const contextCtor: AudioContextConstructor | undefined =
           window.AudioContext ?? (window as typeof window & { webkitAudioContext?: AudioContextConstructor }).webkitAudioContext;
-        if (!contextCtor) {
+
+        if (contextCtor) {
+          if (!audioContextRef.current) {
+            audioContextRef.current = new contextCtor();
+          }
+
+          const context = audioContextRef.current;
+
+          if (context) {
+            if (context.state === 'suspended') {
+              await context.resume();
+            }
+
+            const buffer = context.createBuffer(1, 1, context.sampleRate);
+            const source = context.createBufferSource();
+            source.buffer = buffer;
+            source.connect(context.destination);
+            source.start(0);
+
+            if (context.state === 'suspended') {
+              await context.resume();
+            }
+
+            source.stop();
+            source.disconnect();
+            audioUnlocked = true;
+          }
+        } else {
+          audioUnlocked = true;
+        }
+
+        let elementUnlocked = false;
+        try {
+          let element = audioUnlockElementRef.current;
+          if (!element) {
+            element = new Audio();
+            element.preload = 'auto';
+            element.crossOrigin = 'anonymous';
+            element.loop = false;
+            element.muted = true;
+            element.setAttribute('playsinline', 'true');
+            audioUnlockElementRef.current = element;
+          }
+
+          element.pause();
+          element.src = SILENT_AUDIO_DATA_URI;
+          element.currentTime = 0;
+          const playPromise = element.play();
+          if (playPromise) {
+            await playPromise;
+          }
+          element.pause();
+          element.currentTime = 0;
+          elementUnlocked = true;
+        } catch (unlockErr) {
+          console.warn('[speech] unlockAudioPlayback media unlock failed', unlockErr);
+        }
+
+        if (audioUnlocked && elementUnlocked) {
           unlockedAudioRef.current = true;
           return true;
         }
 
-        if (!audioContextRef.current) {
-          audioContextRef.current = new contextCtor();
-        }
-
-        const context = audioContextRef.current;
-        if (!context) {
-          unlockedAudioRef.current = true;
-          return true;
-        }
-
-        if (context.state === 'suspended') {
-          await context.resume();
-        }
-
-        const buffer = context.createBuffer(1, 1, context.sampleRate);
-        const source = context.createBufferSource();
-        source.buffer = buffer;
-        source.connect(context.destination);
-        source.start(0);
-
-        if (context.state === 'suspended') {
-          await context.resume();
-        }
-
-        source.stop();
-        source.disconnect();
-
-        unlockedAudioRef.current = true;
-        return true;
+        return false;
       } catch (err) {
         console.warn('[speech] unlockAudioPlayback failed', err);
         return false;

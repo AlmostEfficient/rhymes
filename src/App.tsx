@@ -157,7 +157,7 @@ function App() {
     lastNarratedRef.current = '';
     const hasMic = await ensureMicPermission();
     if (!hasMic) {
-      return;
+      console.warn('[speech] proceeding without microphone permission');
     }
     handleStart();
   }, [ensureMicPermission, handleStart, unlockAudioPlayback]);
