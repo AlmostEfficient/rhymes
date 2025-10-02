@@ -1,4 +1,4 @@
-import { useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import './App.css';
 import { PoemStage } from './components/PoemStage';
 import { StanzaProgress } from './components/StanzaProgress';
@@ -6,6 +6,7 @@ import { ArchiveSection } from './components/ArchiveSection';
 import { SettingsPanel } from './components/SettingsPanel';
 import { usePoemEngine } from './hooks/usePoemEngine';
 import { GearSixIcon, ArrowClockwiseIcon } from '@phosphor-icons/react';
+import { useSpeechPipeline } from './hooks/useSpeechPipeline';
 
 function App() {
   const {
@@ -27,8 +28,27 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [tapCount, setTapCount] = useState(0);
   const tapTimerRef = useRef<number | null>(null);
+  const lastNarratedRef = useRef<string>('');
 
   const settingsPanelId = 'poem-settings';
+
+  const {
+    runPipeline,
+    cancelPipeline,
+    isSpeaking,
+    isListening,
+    error: speechError
+  } = useSpeechPipeline({
+    onTranscription: text => {
+      if (!text) return;
+      setUserInput(text);
+      inputRef.current?.blur();
+      const submitted = submitUserLine(text);
+      if (submitted) {
+        setUserInput('');
+      }
+    }
+  });
 
   const handleRhythmTap = () => {
     if (tapTimerRef.current) {
@@ -57,6 +77,32 @@ function App() {
       inputRef.current?.focus();
     }, 100);
   };
+
+  useEffect(() => {
+    if (poemState.isGenerating) {
+      cancelPipeline();
+      return;
+    }
+
+    const firstTwo = poemState.generatedLines.slice(0, 2).filter(Boolean);
+    if (!poemState.isWaitingForUser || firstTwo.length < 2) {
+      return;
+    }
+
+    const signature = `${poemState.currentStanza}:${firstTwo.join('|')}`;
+    if (lastNarratedRef.current === signature) {
+      return;
+    }
+
+    lastNarratedRef.current = signature;
+    runPipeline(firstTwo);
+  }, [cancelPipeline, poemState.currentStanza, poemState.generatedLines, poemState.isGenerating, poemState.isWaitingForUser, runPipeline]);
+
+  useEffect(() => {
+    return () => {
+      cancelPipeline();
+    };
+  }, [cancelPipeline]);
 
   return (
     <div className="app-shell">
@@ -121,6 +167,18 @@ function App() {
       {poemState.isGenerating && (
         <div className="status-text" role="status" aria-live="polite">
           thinking up the next couplet...
+        </div>
+      )}
+
+      {speechError && (
+        <div className="status-text" role="alert">
+          {speechError}
+        </div>
+      )}
+
+      {(isSpeaking || isListening) && !poemState.isGenerating && (
+        <div className="status-text" role="status" aria-live="polite">
+          {isSpeaking ? 'voicing the prophecy...' : 'listening for your rhyme...'}
         </div>
       )}
 

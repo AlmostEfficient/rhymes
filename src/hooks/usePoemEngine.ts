@@ -44,6 +44,51 @@ const pickSupportVoices = (): [string, string] => {
   return [shuffled[0], shuffled[1]];
 };
 
+const sanitizeLine = (rawLine: string): string => {
+  let line = rawLine
+    .replace(/^["'“”]+/, '')
+    .replace(/["'“”]+$/, '')
+    .trim();
+
+  if (!line) return '';
+
+  const stanzaPrefixMatch = line.match(/^(stanza|verse|here'?s|this is)[^:]*:\s*(.*)$/i);
+  if (stanzaPrefixMatch) {
+    line = stanzaPrefixMatch[2]?.trim() ?? '';
+  }
+
+  if (!line) return '';
+
+  if (/[:;]$/.test(line)) {
+    return '';
+  }
+
+  const inlineMatch = line.match(/^(?:stanza|verse|line)\s*\d+\s*[:-]\s*(.*)$/i);
+  if (inlineMatch) {
+    line = inlineMatch[1]?.trim() ?? '';
+  }
+
+  return line.trim();
+};
+
+const extractValidLines = (text: string): string[] => {
+  const rawSegments = text
+    .split(/\r?\n/)
+    .map(segment => segment.trim())
+    .filter(Boolean);
+
+  const lines: string[] = [];
+
+  for (const segment of rawSegments) {
+    const cleaned = sanitizeLine(segment);
+    if (!cleaned) continue;
+    lines.push(cleaned);
+    if (lines.length === 2) break;
+  }
+
+  return lines;
+};
+
 const promptKey = (prompt: (typeof CHARACTERS_AND_DREAMS)[number]) => `${prompt.name}::${prompt.dream}`;
 
 const getRandomPrompt = (excludeKey?: string) => {
@@ -230,11 +275,7 @@ export const usePoemEngine = () => {
           if (!chunk) continue;
           buffer += chunk;
 
-          const partialLines = buffer
-            .split(/\r?\n/)
-            .map(line => line.trim())
-            .filter(Boolean)
-            .slice(0, 2);
+          const partialLines = extractValidLines(buffer);
 
           updatePoemState(prev => ({
             ...prev,
@@ -242,12 +283,7 @@ export const usePoemEngine = () => {
           }));
         }
 
-        const finalLines = buffer
-          .trim()
-          .split(/\r?\n/)
-          .map(line => line.trim())
-          .filter(Boolean)
-          .slice(0, 2);
+        const finalLines = extractValidLines(buffer);
 
         if (sessionId === generationSessionRef.current) {
           updatePoemState(prev => ({
