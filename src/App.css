@@ -18,12 +18,13 @@ body {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 1.5rem;
-  gap: 2rem;
+  gap: 1.2rem;
+  overflow: hidden;
 }
 
 .header {
@@ -33,6 +34,7 @@ body {
   gap: 0.3rem;
   width: 100%;
   max-width: 560px;
+  flex-shrink: 0;
 }
 
 .header h1 {
@@ -112,6 +114,7 @@ body {
   gap: 1.2rem;
   width: 100%;
   max-width: 560px;
+  flex-shrink: 0;
 }
 
 .poem-line {
@@ -261,10 +264,10 @@ body {
 }
 
 .rhythm-guide {
-  margin-top: auto;
   font-size: 0.95rem;
   letter-spacing: 0.08em;
   color: #6b645d;
+  flex-shrink: 0;
 }
 
 .archive-section {
@@ -273,6 +276,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  overflow-y: auto;
+  flex-shrink: 1;
+  min-height: 0;
 }
 
 .archive-section.has-active {
